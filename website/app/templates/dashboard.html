@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · Trading Journal{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+{% endblock %}
+{% block content %}
+<section class="stat-grid">
+  <div class="stat-card">
+    <span class="stat-label">Net P&amp;L</span>
+    <span class="stat-value {{ 'positive' if total_pnl > 0 else ('negative' if total_pnl < 0 else '') }}">
+      {{ "%.2f"|format(total_pnl) }}
+    </span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">Win Rate</span>
+    <span class="stat-value">{{ "%.1f"|format(win_rate) }}%</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">Closed Trades</span>
+    <span class="stat-value">{{ total_trades }}</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">Open Positions</span>
+    <span class="stat-value">{{ open_count }}</span>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>P&amp;L — last 30 days</h2>
+  <canvas id="pnlChart" height="90"></canvas>
+</section>
+
+<section class="panel">
+  <h2>Recent Closed Trades</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Exit Date</th><th>Symbol</th><th>Product</th><th>Dir</th>
+        <th>Qty</th><th>Entry</th><th>Exit</th><th>P&amp;L</th><th>ROI %</th><th>Tags</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in recent %}
+      <tr class="{{ 'row-win' if p.is_win else 'row-loss' }}">
+        <td><a href="/positions/{{ p.id }}">{{ p.exit_date }}</a></td>
+        <td>{{ p.tradingsymbol }}</td>
+        <td>{{ p.product }}</td>
+        <td>{{ p.direction }}</td>
+        <td>{{ p.quantity }}</td>
+        <td>{{ "%.2f"|format(p.entry_price) }}</td>
+        <td>{{ "%.2f"|format(p.exit_price) }}</td>
+        <td class="{{ 'positive' if p.pnl > 0 else ('negative' if p.pnl < 0 else '') }}">{{ "%.2f"|format(p.pnl) }}</td>
+        <td>{{ "%.2f"|format(p.pnl_percent) }}%</td>
+        <td>{% for t in p.tags %}<span class="tag {{ t.css_class }}">{{ t.name }}</span>{% endfor %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="10">No closed trades yet — once the fetcher syncs trades, they'll show up here.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<script>
+  const ctx = document.getElementById('pnlChart');
+  const chartValues = {{ chart_values|tojson }};
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: {{ chart_labels|tojson }},
+      datasets: [{
+        label: 'P&L',
+        data: chartValues,
+        backgroundColor: chartValues.map((v) => (v >= 0 ? '#16a34a' : '#dc2626')),
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true } },
+    },
+  });
+</script>
+{% endblock %}

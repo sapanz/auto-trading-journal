@@ -1,0 +1,5 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_trading_journal_trade_user,trading.journal.trade.user,model_trading_journal_trade,base.group_user,1,1,1,1
+access_trading_journal_position_user,trading.journal.position.user,model_trading_journal_position,base.group_user,1,1,1,1
+access_trading_journal_tag_user,trading.journal.tag.user,model_trading_journal_tag,base.group_user,1,1,1,1
+access_trading_journal_insight_user,trading.journal.insight.user,model_trading_journal_insight,base.group_user,1,1,1,1

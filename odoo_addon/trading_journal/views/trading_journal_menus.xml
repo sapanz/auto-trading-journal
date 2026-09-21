@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <menuitem id="menu_trading_journal_root" name="Trading Journal" sequence="10"/>
+
+    <menuitem id="menu_trading_journal_positions" name="Trades" parent="menu_trading_journal_root"
+              action="action_trading_journal_position" sequence="10"/>
+
+    <menuitem id="menu_trading_journal_insights" name="Insights" parent="menu_trading_journal_root"
+              action="action_trading_journal_insight" sequence="20"/>
+
+    <menuitem id="menu_trading_journal_raw_trades" name="Raw Trades" parent="menu_trading_journal_root"
+              action="action_trading_journal_trade" sequence="30"/>
+</odoo>

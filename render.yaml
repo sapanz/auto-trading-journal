@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: trading-journal
+    runtime: docker
+    dockerfilePath: ./website/Dockerfile
+    dockerContext: ./website
+    plan: free
+    envVars:
+      - key: JOURNAL_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: JOURNAL_BIG_LOSS_PERCENT
+        value: "2.0"

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Raw Trades · Trading Journal{% endblock %}
+{% block content %}
+<section class="panel">
+  <table class="data-table">
+    <thead>
+      <tr><th>Time</th><th>Symbol</th><th>Exchange</th><th>Product</th><th>Side</th><th>Qty</th><th>Price</th><th>Order ID</th></tr>
+    </thead>
+    <tbody>
+      {% for t in trades %}
+      <tr>
+        <td>{{ t.exchange_timestamp }}</td>
+        <td>{{ t.tradingsymbol }}</td>
+        <td>{{ t.exchange }}</td>
+        <td>{{ t.product }}</td>
+        <td class="{{ 'positive' if t.transaction_type == 'BUY' else 'negative' }}">{{ t.transaction_type }}</td>
+        <td>{{ t.quantity }}</td>
+        <td>{{ "%.2f"|format(t.price) }}</td>
+        <td>{{ t.order_id }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8">No trades imported yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

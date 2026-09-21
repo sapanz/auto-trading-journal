@@ -1,0 +1,9 @@
+# Root-level requirements.txt for Vercel's Python builder, which looks
+# for this file next to api/index.py. Mirrors website/requirements.txt
+# (used for local dev / Docker / Render) minus uvicorn, which Vercel's
+# own runtime replaces.
+fastapi>=0.141,<0.142
+sqlalchemy>=2.0,<3.0
+psycopg2-binary>=2.9,<3.0
+jinja2>=3.1,<4.0
+python-multipart>=0.0.32,<0.1

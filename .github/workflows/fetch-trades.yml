@@ -1,0 +1,35 @@
+name: Fetch Zerodha Trades
+
+on:
+  schedule:
+    # 10:05 UTC = 15:35 IST — shortly after NSE/BSE market close (15:30 IST), weekdays only.
+    - cron: '5 10 * * 1-5'
+  workflow_dispatch: {}
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r fetcher/requirements.txt
+
+      - name: Fetch trades and sync to the journal
+        working-directory: fetcher
+        env:
+          KITE_API_KEY: ${{ secrets.KITE_API_KEY }}
+          KITE_API_SECRET: ${{ secrets.KITE_API_SECRET }}
+          KITE_USER_ID: ${{ secrets.KITE_USER_ID }}
+          KITE_PASSWORD: ${{ secrets.KITE_PASSWORD }}
+          KITE_TOTP_SECRET: ${{ secrets.KITE_TOTP_SECRET }}
+          JOURNAL_URL: ${{ secrets.JOURNAL_URL }}
+          JOURNAL_API_KEY: ${{ secrets.JOURNAL_API_KEY }}
+          VERCEL_PROTECTION_BYPASS_SECRET: ${{ secrets.VERCEL_PROTECTION_BYPASS_SECRET }}
+        run: python fetch_trades.py

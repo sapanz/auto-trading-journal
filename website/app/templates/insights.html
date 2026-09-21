@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Insights · Trading Journal{% endblock %}
+{% block content %}
+<section class="panel">
+  <form method="post" action="/insights/generate">
+    <button type="submit">Generate insight now</button>
+  </form>
+  <ul class="insight-list">
+    {% for i in insights %}
+    <li><a href="/insights/{{ i.id }}">{{ i.name }}</a></li>
+    {% else %}
+    <li>No insights yet — click "Generate insight now" once you have at least a few closed trades.</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}
