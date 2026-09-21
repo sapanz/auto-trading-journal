@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_trading_journal_insight_list" model="ir.ui.view">
+        <field name="name">trading.journal.insight.list</field>
+        <field name="model">trading.journal.insight</field>
+        <field name="arch" type="xml">
+            <list string="Insights" create="false" edit="false" default_order="period_end desc">
+                <field name="name"/>
+                <field name="period_start"/>
+                <field name="period_end"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_trading_journal_insight_form" model="ir.ui.view">
+        <field name="name">trading.journal.insight.form</field>
+        <field name="model">trading.journal.insight</field>
+        <field name="arch" type="xml">
+            <form string="Insight" create="false" edit="false">
+                <sheet>
+                    <h1>
+                        <field name="name" readonly="1"/>
+                    </h1>
+                    <field name="body" readonly="1"/>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_trading_journal_insight" model="ir.actions.act_window">
+        <field name="name">Insights</field>
+        <field name="res_model">trading.journal.insight</field>
+        <field name="view_mode">list,form</field>
+    </record>
+</odoo>

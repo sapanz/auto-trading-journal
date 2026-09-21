@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_trading_journal_position_list" model="ir.ui.view">
+        <field name="name">trading.journal.position.list</field>
+        <field name="model">trading.journal.position</field>
+        <field name="arch" type="xml">
+            <list string="Trades" default_order="exit_time desc" decoration-success="pnl &gt; 0" decoration-danger="pnl &lt; 0">
+                <field name="exit_date" optional="show"/>
+                <field name="tradingsymbol"/>
+                <field name="product"/>
+                <field name="direction"/>
+                <field name="state"/>
+                <field name="quantity"/>
+                <field name="entry_price"/>
+                <field name="exit_price"/>
+                <field name="pnl" sum="Total P&amp;L"/>
+                <field name="pnl_percent" string="ROI %"/>
+                <field name="holding_minutes"/>
+                <field name="tag_ids" widget="many2many_tags"/>
+                <field name="rating" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_trading_journal_position_form" model="ir.ui.view">
+        <field name="name">trading.journal.position.form</field>
+        <field name="model">trading.journal.position</field>
+        <field name="arch" type="xml">
+            <form string="Trade">
+                <sheet>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="tradingsymbol" readonly="1"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group string="Position">
+                            <field name="direction" readonly="1"/>
+                            <field name="product" readonly="1"/>
+                            <field name="state" readonly="1"/>
+                            <field name="quantity" readonly="1"/>
+                            <field name="tag_ids" widget="many2many_tags"/>
+                        </group>
+                        <group string="Result">
+                            <field name="entry_price" readonly="1"/>
+                            <field name="exit_price" readonly="1"/>
+                            <field name="pnl" readonly="1"/>
+                            <field name="pnl_percent" readonly="1"/>
+                            <field name="holding_minutes" readonly="1"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group string="Timing">
+                            <field name="entry_time" readonly="1"/>
+                            <field name="exit_time" readonly="1"/>
+                        </group>
+                        <group string="Self Review">
+                            <field name="rating"/>
+                        </group>
+                    </group>
+                    <group string="Journal Notes">
+                        <field name="notes" nolabel="1" placeholder="What was your plan? Did you follow it? What would you do differently?"/>
+                    </group>
+                    <notebook>
+                        <page string="Trade Legs">
+                            <group>
+                                <field name="entry_trade_ids" readonly="1"/>
+                                <field name="exit_trade_ids" readonly="1"/>
+                            </group>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_trading_journal_position_search" model="ir.ui.view">
+        <field name="name">trading.journal.position.search</field>
+        <field name="model">trading.journal.position</field>
+        <field name="arch" type="xml">
+            <search string="Search Trades">
+                <field name="tradingsymbol"/>
+                <field name="tag_ids"/>
+                <filter string="Open" name="filter_open" domain="[('state', '=', 'open')]"/>
+                <filter string="Closed" name="filter_closed" domain="[('state', '=', 'closed')]"/>
+                <separator/>
+                <filter string="Wins" name="filter_wins" domain="[('is_win', '=', True)]"/>
+                <filter string="Losses" name="filter_losses" domain="[('state', '=', 'closed'), ('is_win', '=', False)]"/>
+                <separator/>
+                <filter string="This Week" name="filter_this_week"
+                        domain="[('exit_date', '&gt;=', (context_today() - relativedelta(days=7)).strftime('%Y-%m-%d'))]"/>
+                <group expand="0" string="Group By">
+                    <filter string="Symbol" name="group_symbol" context="{'group_by': 'tradingsymbol'}"/>
+                    <filter string="Product" name="group_product" context="{'group_by': 'product'}"/>
+                    <filter string="Direction" name="group_direction" context="{'group_by': 'direction'}"/>
+                    <filter string="Exit Date" name="group_exit_date" context="{'group_by': 'exit_date'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_trading_journal_position_graph" model="ir.ui.view">
+        <field name="name">trading.journal.position.graph</field>
+        <field name="model">trading.journal.position</field>
+        <field name="arch" type="xml">
+            <graph string="P&amp;L Over Time" type="bar">
+                <field name="exit_date" type="row"/>
+                <field name="pnl" type="measure"/>
+            </graph>
+        </field>
+    </record>
+
+    <record id="view_trading_journal_position_pivot" model="ir.ui.view">
+        <field name="name">trading.journal.position.pivot</field>
+        <field name="model">trading.journal.position</field>
+        <field name="arch" type="xml">
+            <pivot string="P&amp;L Analysis">
+                <field name="tradingsymbol" type="row"/>
+                <field name="exit_date" interval="week" type="col"/>
+                <field name="pnl" type="measure"/>
+                <field name="pnl_percent" type="measure"/>
+            </pivot>
+        </field>
+    </record>
+
+    <record id="action_trading_journal_position" model="ir.actions.act_window">
+        <field name="name">Trading Journal</field>
+        <field name="res_model">trading.journal.position</field>
+        <field name="view_mode">list,form,graph,pivot</field>
+        <field name="search_view_id" ref="view_trading_journal_position_search"/>
+        <field name="context">{'search_default_filter_closed': 1}</field>
+    </record>
+</odoo>

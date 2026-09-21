@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_trading_journal_trade_list" model="ir.ui.view">
+        <field name="name">trading.journal.trade.list</field>
+        <field name="model">trading.journal.trade</field>
+        <field name="arch" type="xml">
+            <list string="Raw Trades" create="false" edit="false" default_order="exchange_timestamp desc">
+                <field name="exchange_timestamp"/>
+                <field name="tradingsymbol"/>
+                <field name="exchange"/>
+                <field name="product"/>
+                <field name="transaction_type" decoration-success="transaction_type == 'BUY'" decoration-danger="transaction_type == 'SELL'"/>
+                <field name="quantity"/>
+                <field name="price"/>
+                <field name="order_id"/>
+                <field name="trade_id"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_trading_journal_trade_search" model="ir.ui.view">
+        <field name="name">trading.journal.trade.search</field>
+        <field name="model">trading.journal.trade</field>
+        <field name="arch" type="xml">
+            <search string="Search Trades">
+                <field name="tradingsymbol"/>
+                <field name="order_id"/>
+                <filter string="Buy" name="filter_buy" domain="[('transaction_type', '=', 'BUY')]"/>
+                <filter string="Sell" name="filter_sell" domain="[('transaction_type', '=', 'SELL')]"/>
+                <group expand="0" string="Group By">
+                    <filter string="Symbol" name="group_symbol" context="{'group_by': 'tradingsymbol'}"/>
+                    <filter string="Product" name="group_product" context="{'group_by': 'product'}"/>
+                    <filter string="Trade Date" name="group_date" context="{'group_by': 'trade_date'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_trading_journal_trade" model="ir.actions.act_window">
+        <field name="name">Raw Trades</field>
+        <field name="res_model">trading.journal.trade</field>
+        <field name="view_mode">list</field>
+        <field name="search_view_id" ref="view_trading_journal_trade_search"/>
+    </record>
+</odoo>
