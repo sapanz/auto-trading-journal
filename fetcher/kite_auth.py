@@ -72,7 +72,11 @@ class KiteTOTPLogin:
             'twofa_value': totp_code,
             'twofa_type': 'totp',
         }, timeout=30)
-        resp.raise_for_status()
+        if resp.status_code != 200:
+            raise KiteLoginError(
+                'Zerodha login (TOTP step) request failed with HTTP %d. Response body: %s'
+                % (resp.status_code, resp.text[:2000])
+            )
         payload = resp.json()
         if payload.get('status') != 'success':
             raise KiteLoginError('Zerodha login (TOTP step) failed: %s' % payload.get('message'))
