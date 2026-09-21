@@ -23,15 +23,20 @@ REQUIRED_ENV_VARS = [
 # "Protection Bypass for Automation" configured (Settings > Deployment
 # Protection). Lets this script through Vercel's own SSO wall without
 # weakening it for regular browser visitors. Not used by other hosts.
-VERCEL_PROTECTION_BYPASS_SECRET = os.environ.get('VERCEL_PROTECTION_BYPASS_SECRET')
+VERCEL_PROTECTION_BYPASS_SECRET = (os.environ.get('VERCEL_PROTECTION_BYPASS_SECRET') or '').strip()
 
 
 def get_config():
-    missing = [name for name in REQUIRED_ENV_VARS if not os.environ.get(name)]
+    # .strip() guards against a trailing newline/space in a copy-pasted
+    # GitHub secret (a common source of "invalid credential" errors that
+    # look identical to an actually-wrong value).
+    values = {name: (os.environ.get(name) or '').strip() for name in REQUIRED_ENV_VARS}
+    missing = [name for name, value in values.items() if not value]
     if missing:
         print('Missing required environment variable(s): %s' % ', '.join(missing), file=sys.stderr)
         sys.exit(1)
-    return {name: os.environ[name] for name in REQUIRED_ENV_VARS}
+    print('KITE_API_KEY length: %d chars' % len(values['KITE_API_KEY']))
+    return values
 
 
 def to_str(value):
