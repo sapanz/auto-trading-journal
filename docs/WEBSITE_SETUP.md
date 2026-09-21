@@ -1,9 +1,11 @@
 # Website Setup Guide
 
-This is the standalone trading journal website: a self-contained FastAPI +
-SQLite app under `website/`. It's the active path for now — the Odoo
-module (`odoo_addon/`) is on hold and can be revisited later; the fetcher
-talks to whichever backend is configured via `JOURNAL_URL`.
+This is the standalone trading journal website: a self-contained FastAPI
+app under `website/`, using SQLite for local development and Postgres
+(e.g. a free Neon database) for any real deployment. It's the active path
+for now — the Odoo module (`odoo_addon/`) is on hold and can be revisited
+later; the fetcher talks to whichever backend is configured via
+`JOURNAL_URL`.
 
 ## 1. Run it locally
 
@@ -73,17 +75,52 @@ workflow manually to test end to end.
 
 ## 4. Deploying
 
-This is a single Python process with a local SQLite file — no separate
-database server needed. Pick whichever of these fits what you already run:
+### Free option: Render (compute) + Neon (Postgres)
 
-- **Docker**: `docker build -t trading-journal website/` then
-  `docker run -d -p 8000:8000 -e JOURNAL_API_KEY=... -v journal-data:/data trading-journal`
-  (the volume persists `journal.db` across restarts).
+Render's free web service tier has an **ephemeral filesystem** — anything
+written to disk (a local SQLite file) is wiped on every restart or
+redeploy. To get a genuinely persistent, genuinely free deployment, pair
+it with a free hosted Postgres database instead of local SQLite:
+
+1. **Database**: create a free account at https://neon.tech, create a
+   project/database, and copy its connection string (looks like
+   `postgresql://user:password@host/dbname?sslmode=require`).
+2. **Web service**: create a free account at https://render.com (no credit
+   card required for the free web service plan). Either:
+   - Use the included `render.yaml` blueprint (repo root) via Render's
+     "New → Blueprint" flow pointed at this GitHub repo, or
+   - Create a web service manually: connect this repo, runtime **Docker**,
+     Dockerfile path `website/Dockerfile`, docker context `website`, plan
+     **Free**.
+3. Set these environment variables on the Render service:
+   - `DATABASE_URL` — the Neon connection string from step 1
+   - `JOURNAL_API_KEY` — a long random string (same value goes in the
+     `JOURNAL_API_KEY` GitHub secret)
+   - `JOURNAL_BIG_LOSS_PERCENT` — optional, defaults to `2.0`
+4. Deploy. Render gives you a public URL like
+   `https://trading-journal-xxxx.onrender.com` — that's your `JOURNAL_URL`.
+
+The app auto-detects `DATABASE_URL` and uses Postgres when it's set,
+falling back to local SQLite (via `JOURNAL_DB_PATH`) otherwise — see
+`website/app/database.py`. No other code changes needed to move between
+them.
+
+Note: Render's free web services also spin down after periods of
+inactivity and take a few seconds to wake back up on the next request —
+fine for a personal journal, just don't expect instant load on a cold
+visit.
+
+### Other options
+
+- **Docker, self-hosted**: `docker build -t trading-journal website/` then
+  `docker run -d -p 8000:8000 -e JOURNAL_API_KEY=... -e DATABASE_URL=... trading-journal`
+  (or omit `DATABASE_URL` and mount a volume at `/data` to persist
+  `journal.db` locally instead).
 - **systemd + uvicorn/gunicorn**: run
   `uvicorn app.main:app --host 0.0.0.0 --port 8000` (or gunicorn with
-  uvicorn workers) as a systemd service, with `JOURNAL_API_KEY` and
-  `JOURNAL_DB_PATH` set in the unit's `Environment=` lines, behind a
-  reverse proxy (nginx/Caddy) for TLS.
+  uvicorn workers) as a systemd service, with `JOURNAL_API_KEY` and either
+  `DATABASE_URL` or `JOURNAL_DB_PATH` set in the unit's `Environment=`
+  lines, behind a reverse proxy (nginx/Caddy) for TLS.
 - Any other host that runs a long-lived Python process and can reach the
   internet (for the GitHub Actions fetcher to POST to it) works too.
 
