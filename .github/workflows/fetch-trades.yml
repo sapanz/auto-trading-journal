@@ -29,6 +29,6 @@ jobs:
           KITE_USER_ID: ${{ secrets.KITE_USER_ID }}
           KITE_PASSWORD: ${{ secrets.KITE_PASSWORD }}
           KITE_TOTP_SECRET: ${{ secrets.KITE_TOTP_SECRET }}
-          ODOO_URL: ${{ secrets.ODOO_URL }}
-          ODOO_API_KEY: ${{ secrets.ODOO_API_KEY }}
+          JOURNAL_URL: ${{ secrets.JOURNAL_URL }}
+          JOURNAL_API_KEY: ${{ secrets.JOURNAL_API_KEY }}
         run: python fetch_trades.py

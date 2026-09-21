@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Fetch today's trades from Zerodha Kite Connect and push them into the
-Odoo Trading Journal module via its ingestion API.
+Trading Journal website via its ingestion API.
 
 Intended to run on a schedule (see .github/workflows/fetch-trades.yml).
-Required environment variables are documented in docs/SETUP.md.
+Required environment variables are documented in docs/WEBSITE_SETUP.md.
 """
 import datetime
 import os
@@ -16,7 +16,7 @@ from kite_auth import KiteTOTPLogin, KiteLoginError
 
 REQUIRED_ENV_VARS = [
     'KITE_API_KEY', 'KITE_API_SECRET', 'KITE_USER_ID', 'KITE_PASSWORD', 'KITE_TOTP_SECRET',
-    'ODOO_URL', 'ODOO_API_KEY',
+    'JOURNAL_URL', 'JOURNAL_API_KEY',
 ]
 
 
@@ -93,19 +93,19 @@ def main():
         return
 
     payload = {'trades': build_payload(raw_trades)}
-    odoo_url = config['ODOO_URL'].rstrip('/')
+    journal_url = config['JOURNAL_URL'].rstrip('/')
 
     resp = requests.post(
-        '%s/api/trading-journal/trades' % odoo_url,
+        '%s/api/trades' % journal_url,
         json=payload,
-        headers={'X-Api-Key': config['ODOO_API_KEY']},
+        headers={'X-Api-Key': config['JOURNAL_API_KEY']},
         timeout=60,
     )
     if resp.status_code != 200:
-        print('Odoo ingestion failed (%d): %s' % (resp.status_code, resp.text), file=sys.stderr)
+        print('Journal ingestion failed (%d): %s' % (resp.status_code, resp.text), file=sys.stderr)
         sys.exit(1)
 
-    print('Odoo response:', resp.json())
+    print('Journal response:', resp.json())
 
 
 if __name__ == '__main__':

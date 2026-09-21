@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ pos.tradingsymbol }} · Trading Journal{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>{{ pos.tradingsymbol }} <span class="tag {{ 'tag-win' if pos.is_win else 'tag-loss' }}">{{ pos.direction }}</span></h1>
+  <div class="detail-grid">
+    <div><span class="stat-label">Product</span><span>{{ pos.product }}</span></div>
+    <div><span class="stat-label">State</span><span>{{ pos.state }}</span></div>
+    <div><span class="stat-label">Quantity</span><span>{{ pos.quantity }}</span></div>
+    <div><span class="stat-label">Entry Price</span><span>{{ "%.2f"|format(pos.entry_price) }}</span></div>
+    <div><span class="stat-label">Exit Price</span><span>{{ "%.2f"|format(pos.exit_price) if pos.state == 'closed' else '—' }}</span></div>
+    <div><span class="stat-label">P&amp;L</span><span class="{{ 'positive' if pos.pnl > 0 else ('negative' if pos.pnl < 0 else '') }}">{{ "%.2f"|format(pos.pnl) }}</span></div>
+    <div><span class="stat-label">ROI %</span><span>{{ "%.2f"|format(pos.pnl_percent) }}%</span></div>
+    <div><span class="stat-label">Entry Time</span><span>{{ pos.entry_time }}</span></div>
+    <div><span class="stat-label">Exit Time</span><span>{{ pos.exit_time or '—' }}</span></div>
+    <div><span class="stat-label">Holding (min)</span><span>{{ "%.1f"|format(pos.holding_minutes) }}</span></div>
+  </div>
+  <div class="tags-row">
+    {% for t in pos.tags %}<span class="tag {{ t.css_class }}">{{ t.name }}</span>{% endfor %}
+  </div>
+
+  <form method="post" action="/positions/{{ pos.id }}/notes" class="notes-form">
+    <label for="rating">Self rating</label>
+    <select name="rating" id="rating">
+      <option value="">—</option>
+      {% for i in range(1, 6) %}
+      <option value="{{ i }}" {{ 'selected' if pos.rating == i else '' }}>{{ i }}</option>
+      {% endfor %}
+    </select>
+    <label for="notes">Journal notes</label>
+    <textarea name="notes" id="notes" rows="6" placeholder="What was your plan? Did you follow it? What would you do differently?">{{ pos.notes or '' }}</textarea>
+    <button type="submit">Save</button>
+  </form>
+</section>
+{% endblock %}

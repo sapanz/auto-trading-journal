@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Website runtime data / secrets
+website/journal.db
+website/.env
+
+# OS / editor cruft
+.DS_Store

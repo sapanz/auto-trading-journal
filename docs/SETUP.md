@@ -1,6 +1,13 @@
-# Setup Guide
+# Setup Guide (Odoo module — on hold)
 
-This project has two parts:
+> **This integration is currently paused.** The active dashboard is the
+> standalone website in `website/` — see
+> [docs/WEBSITE_SETUP.md](WEBSITE_SETUP.md) for that. This document is kept
+> for when the Odoo integration is picked back up; the FIFO P&L logic is
+> shared conceptually between both (`website/app/matching.py` is a direct
+> port of `odoo_addon/trading_journal/models/trading_journal_position.py`).
+
+This part of the project has two pieces:
 
 1. **`odoo_addon/trading_journal`** — an Odoo module that stores trades,
    auto-matches them into round-trip positions, computes P&L/ROI, flags

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Trades · Trading Journal{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="filters">
+    <a href="/positions" class="{{ 'active' if not state else '' }}">All</a>
+    <a href="/positions?state=open" class="{{ 'active' if state == 'open' else '' }}">Open</a>
+    <a href="/positions?state=closed" class="{{ 'active' if state == 'closed' else '' }}">Closed</a>
+  </div>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Exit Date</th><th>Symbol</th><th>Product</th><th>Dir</th><th>State</th>
+        <th>Qty</th><th>Entry</th><th>Exit</th><th>P&amp;L</th><th>ROI %</th><th>Hold (min)</th><th>Tags</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in positions %}
+      <tr class="{{ 'row-win' if p.is_win else ('row-loss' if p.state == 'closed' else '') }}">
+        <td><a href="/positions/{{ p.id }}">{{ p.exit_date or '—' }}</a></td>
+        <td>{{ p.tradingsymbol }}</td>
+        <td>{{ p.product }}</td>
+        <td>{{ p.direction }}</td>
+        <td>{{ p.state }}</td>
+        <td>{{ p.quantity }}</td>
+        <td>{{ "%.2f"|format(p.entry_price) }}</td>
+        <td>{{ "%.2f"|format(p.exit_price) if p.state == 'closed' else '—' }}</td>
+        <td class="{{ 'positive' if p.pnl > 0 else ('negative' if p.pnl < 0 else '') }}">{{ "%.2f"|format(p.pnl) }}</td>
+        <td>{{ "%.2f"|format(p.pnl_percent) }}%</td>
+        <td>{{ "%.1f"|format(p.holding_minutes) if p.state == 'closed' else '—' }}</td>
+        <td>{% for t in p.tags %}<span class="tag {{ t.css_class }}">{{ t.name }}</span>{% endfor %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="12">No trades yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
