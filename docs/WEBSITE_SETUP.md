@@ -75,7 +75,46 @@ workflow manually to test end to end.
 
 ## 4. Deploying
 
-### Free option: Render (compute) + Neon (Postgres)
+### Free, no-card option: Vercel (compute) + Neon (Postgres)
+
+This is the path actually used for this project (Render, below, now asks
+for a card-on-file even for its free plan — Vercel's free Hobby tier does
+not).
+
+The app runs on Vercel as a Python serverless function via
+`website/api/index.py`, which just re-exports the same FastAPI `app` from
+`app/main.py` — no code fork, same app runs locally (uvicorn) and on
+Vercel. `website/vercel.json` configures the build.
+
+1. **Database**: create a free account at https://neon.tech, create a
+   project/database, and copy its connection string (looks like
+   `postgresql://user:password@host/dbname?sslmode=require`) — use the
+   **pooled** connection string if Neon offers both (works better with
+   serverless's many short-lived connections).
+2. **Web app**: create a free account at https://vercel.com (GitHub OAuth,
+   no card), then **Add New → Project → Import** this GitHub repo.
+   - Set **Root Directory** to `website`.
+   - Framework preset: Vercel should auto-detect Python via
+     `vercel.json`; if it asks, choose "Other".
+   - Under **Environment Variables**, add:
+     - `DATABASE_URL` — the Neon connection string from step 1
+     - `JOURNAL_API_KEY` — a long random string (same value goes in the
+       `JOURNAL_API_KEY` GitHub secret)
+     - `JOURNAL_BIG_LOSS_PERCENT` — optional, defaults to `2.0`
+   - Deploy.
+3. Vercel gives you a public URL like
+   `https://<project>.vercel.app` — that's your `JOURNAL_URL`.
+
+Since the PR branch may not be `main` yet, either point Vercel's
+Production Branch at the feature branch temporarily, or use the automatic
+Preview Deployment URL Vercel creates for that branch's pushes.
+
+The app auto-detects `DATABASE_URL` and uses Postgres when it's set,
+falling back to local SQLite (via `JOURNAL_DB_PATH`) otherwise — see
+`website/app/database.py`. Serverless functions have no persistent local
+disk, so `DATABASE_URL` (Postgres) is required here, not optional.
+
+### Render (compute) + Neon (Postgres) — requires a card
 
 Render's free web service tier has an **ephemeral filesystem** — anything
 written to disk (a local SQLite file) is wiped on every restart or
@@ -85,8 +124,10 @@ it with a free hosted Postgres database instead of local SQLite:
 1. **Database**: create a free account at https://neon.tech, create a
    project/database, and copy its connection string (looks like
    `postgresql://user:password@host/dbname?sslmode=require`).
-2. **Web service**: create a free account at https://render.com (no credit
-   card required for the free web service plan). Either:
+2. **Web service**: create a free account at https://render.com — note
+   Render now requires a card on file to create any web service, even on
+   the free plan (a verification hold, not a recurring charge; use Vercel
+   above if you'd rather avoid that). Either:
    - Use the included `render.yaml` blueprint (repo root) via Render's
      "New → Blueprint" flow pointed at this GitHub repo, or
    - Create a web service manually: connect this repo, runtime **Docker**,
