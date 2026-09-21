@@ -35,7 +35,8 @@ def get_config():
     if missing:
         print('Missing required environment variable(s): %s' % ', '.join(missing), file=sys.stderr)
         sys.exit(1)
-    print('KITE_API_KEY length: %d chars' % len(values['KITE_API_KEY']))
+    print('KITE_API_KEY length: %d chars, KITE_API_SECRET length: %d chars'
+          % (len(values['KITE_API_KEY']), len(values['KITE_API_SECRET'])))
     return values
 
 
