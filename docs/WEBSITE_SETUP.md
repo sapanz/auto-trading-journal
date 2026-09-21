@@ -63,6 +63,7 @@ Odoo:
 |---|---|
 | `JOURNAL_URL` | Base URL of this website, e.g. `https://journal.yourdomain.com` or `http://<host>:8000` |
 | `JOURNAL_API_KEY` | Same value as the website's `JOURNAL_API_KEY` |
+| `VERCEL_PROTECTION_BYPASS_SECRET` | Only if deployed on Vercel with "Protection Bypass for Automation" enabled (see the Vercel deploy section below) — omit entirely for other hosts. |
 
 Plus the Kite Connect variables (`KITE_API_KEY`, `KITE_API_SECRET`,
 `KITE_USER_ID`, `KITE_PASSWORD`, `KITE_TOTP_SECRET`) — see the Kite Connect
@@ -120,6 +121,24 @@ The app auto-detects `DATABASE_URL` and uses Postgres when it's set,
 falling back to local SQLite (via `JOURNAL_DB_PATH`) otherwise — see
 `website/app/database.py`. Serverless functions have no persistent local
 disk, so `DATABASE_URL` (Postgres) is required here, not optional.
+
+**Deployment Protection**: on Team/Pro workspaces, Vercel often enables
+"Vercel Authentication" by default, which puts an SSO wall in front of
+every deployment (including preview URLs) — any unauthenticated request,
+including the GitHub Actions cron's `POST /api/trades`, gets a 401
+`{"error":{"code":"401","message":"Protected deployment"}}` instead of
+reaching the app. Check **Settings → Deployment Protection**:
+
+- If it's on and you want to keep it (recommended, since the app itself
+  has no login yet — see the note below): enable **"Protection Bypass for
+  Automation"**, which generates a secret. Set it as the
+  `VERCEL_PROTECTION_BYPASS_SECRET` GitHub Actions secret — the fetcher
+  sends it as the `x-vercel-protection-bypass` header automatically when
+  that secret is present (see `fetcher/fetch_trades.py`). Any manual
+  `curl` testing needs the same header.
+- If you'd rather have no wall at all, turn "Vercel Authentication" off
+  entirely — the dashboard and API become fully public to anyone with the
+  URL.
 
 ### Render (compute) + Neon (Postgres) — requires a card
 

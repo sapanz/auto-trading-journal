@@ -19,6 +19,12 @@ REQUIRED_ENV_VARS = [
     'JOURNAL_URL', 'JOURNAL_API_KEY',
 ]
 
+# Optional: only needed if JOURNAL_URL points at a Vercel deployment with
+# "Protection Bypass for Automation" configured (Settings > Deployment
+# Protection). Lets this script through Vercel's own SSO wall without
+# weakening it for regular browser visitors. Not used by other hosts.
+VERCEL_PROTECTION_BYPASS_SECRET = os.environ.get('VERCEL_PROTECTION_BYPASS_SECRET')
+
 
 def get_config():
     missing = [name for name in REQUIRED_ENV_VARS if not os.environ.get(name)]
@@ -95,10 +101,14 @@ def main():
     payload = {'trades': build_payload(raw_trades)}
     journal_url = config['JOURNAL_URL'].rstrip('/')
 
+    headers = {'X-Api-Key': config['JOURNAL_API_KEY']}
+    if VERCEL_PROTECTION_BYPASS_SECRET:
+        headers['x-vercel-protection-bypass'] = VERCEL_PROTECTION_BYPASS_SECRET
+
     resp = requests.post(
         '%s/api/trades' % journal_url,
         json=payload,
-        headers={'X-Api-Key': config['JOURNAL_API_KEY']},
+        headers=headers,
         timeout=60,
     )
     if resp.status_code != 200:
