@@ -3,6 +3,10 @@ website/) because Vercel builds from the actual repository root unless
 "Root Directory" is overridden in project settings — which isn't
 available on every plan. This re-exports the same FastAPI app from
 website/app/main.py unchanged; no code fork.
+
+Requires DATABASE_URL (Postgres) to be set as an environment variable on
+the deployment — serverless functions have no writable local disk, so the
+SQLite fallback in app/database.py cannot work here.
 """
 import sys
 from pathlib import Path
