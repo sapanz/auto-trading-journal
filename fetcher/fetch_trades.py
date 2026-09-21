@@ -60,12 +60,14 @@ def build_payload(raw_trades):
     trades = []
     for t in raw_trades:
         trades.append({
-            'trade_id': t['trade_id'],
-            'order_id': t['order_id'],
-            'exchange_order_id': t.get('exchange_order_id'),
+            # Kite Connect returns instrument_token as an int (and some ID
+            # fields inconsistently); the journal's schema expects strings.
+            'trade_id': to_str(t['trade_id']),
+            'order_id': to_str(t['order_id']),
+            'exchange_order_id': to_str(t.get('exchange_order_id')),
             'tradingsymbol': t['tradingsymbol'],
             'exchange': t['exchange'],
-            'instrument_token': t.get('instrument_token'),
+            'instrument_token': to_str(t.get('instrument_token')),
             'product': t['product'],
             'transaction_type': t['transaction_type'],
             'quantity': t['quantity'],
