@@ -81,10 +81,16 @@ This is the path actually used for this project (Render, below, now asks
 for a card-on-file even for its free plan — Vercel's free Hobby tier does
 not).
 
-The app runs on Vercel as a Python serverless function via
-`website/api/index.py`, which just re-exports the same FastAPI `app` from
-`app/main.py` — no code fork, same app runs locally (uvicorn) and on
-Vercel. `website/vercel.json` configures the build.
+The app runs on Vercel as a Python serverless function via **root-level**
+`api/index.py` and `vercel.json` — not under `website/`. This is
+deliberate: Vercel builds from the actual repository root unless "Root
+Directory" is overridden in project settings, and that override isn't
+available on every plan/team. `api/index.py` just re-exports the same
+FastAPI `app` from `website/app/main.py` (adding `website/` to
+`sys.path`) — no code fork; the identical app runs locally via uvicorn and
+on Vercel. The root `requirements.txt` mirrors `website/requirements.txt`
+(minus `uvicorn`, which Vercel's own runtime replaces) since Vercel's
+Python builder looks for `requirements.txt` next to the function.
 
 1. **Database**: create a free account at https://neon.tech, create a
    project/database, and copy its connection string (looks like
@@ -93,8 +99,9 @@ Vercel. `website/vercel.json` configures the build.
    serverless's many short-lived connections).
 2. **Web app**: create a free account at https://vercel.com (GitHub OAuth,
    no card), then **Add New → Project → Import** this GitHub repo.
-   - Set **Root Directory** to `website`.
-   - Framework preset: Vercel should auto-detect Python via
+   - Leave **Root Directory** as the repo root (default) — do not set it
+     to `website`.
+   - Framework preset: Vercel should auto-detect Python via the root
      `vercel.json`; if it asks, choose "Other".
    - Under **Environment Variables**, add:
      - `DATABASE_URL` — the Neon connection string from step 1
