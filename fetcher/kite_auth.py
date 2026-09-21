@@ -11,7 +11,7 @@ or rate-limits automated logins, this will start failing and needs to be
 updated. It is a deliberate tradeoff for zero-touch daily automation; see
 docs/SETUP.md for the manual-token fallback if this breaks.
 """
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, urljoin
 
 import pyotp
 import requests
@@ -82,25 +82,41 @@ class KiteTOTPLogin:
             raise KiteLoginError('Zerodha login (TOTP step) failed: %s' % payload.get('message'))
 
         kite = KiteConnect(api_key=self.api_key)
-        login_redirect = self.session.get(kite.login_url(), timeout=30)
-
-        request_token = None
-        for resp in list(login_redirect.history) + [login_redirect]:
-            qs = parse_qs(urlparse(resp.url).query)
-            if 'request_token' in qs:
-                request_token = qs['request_token'][0]
-                break
-
+        request_token = self._follow_redirects_for_token(kite.login_url())
         if not request_token:
-            redirect_chain = ' -> '.join(r.url for r in list(login_redirect.history) + [login_redirect])
             raise KiteLoginError(
-                'Could not extract request_token from Zerodha login redirect. This app may need a '
-                'one-time manual authorization (Kite Connect shows a consent/"Authorize app" screen the '
-                'first time an app is used), or the login flow has changed.\n'
-                'Final URL: %s\nRedirect chain: %s\nPage snippet: %s'
-                % (login_redirect.url, redirect_chain, login_redirect.text[:1500])
+                'Could not find request_token in any redirect from Zerodha login. The login flow may '
+                'have changed, or this app needs one-time manual authorization at: %s'
+                % kite.login_url()
             )
         return request_token
+
+    def _follow_redirects_for_token(self, url):
+        """Manually walk the redirect chain instead of letting requests
+        auto-follow it. The final hop goes to the Kite Connect app's
+        registered Redirect URL (e.g. a placeholder like localhost:8080)
+        carrying request_token as a query param — that URL is very often
+        not actually reachable from wherever this script runs, so we must
+        extract the token from the Location header itself rather than
+        trying to connect to it."""
+        current_url = url
+        for _ in range(10):
+            qs = parse_qs(urlparse(current_url).query)
+            if 'request_token' in qs:
+                return qs['request_token'][0]
+
+            resp = self.session.get(current_url, timeout=30, allow_redirects=False)
+            location = resp.headers.get('Location')
+            if not location:
+                return None
+
+            next_url = urljoin(current_url, location)
+            qs = parse_qs(urlparse(next_url).query)
+            if 'request_token' in qs:
+                return qs['request_token'][0]
+
+            current_url = next_url
+        return None
 
     def get_access_token(self):
         request_token = self._request_token()
