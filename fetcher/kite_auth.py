@@ -20,6 +20,20 @@ from kiteconnect import KiteConnect
 LOGIN_URL = 'https://kite.zerodha.com/api/login'
 TWOFA_URL = 'https://kite.zerodha.com/api/twofa'
 
+# Zerodha's login endpoint 403s requests that don't look like they came
+# from a real browser (e.g. the default python-requests User-Agent).
+BROWSER_HEADERS = {
+    'User-Agent': (
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+        '(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'
+    ),
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Origin': 'https://kite.zerodha.com',
+    'Referer': 'https://kite.zerodha.com/',
+    'X-Kite-Version': '3.0.0',
+}
+
 
 class KiteLoginError(RuntimeError):
     pass
@@ -33,13 +47,19 @@ class KiteTOTPLogin:
         self.password = password
         self.totp_secret = totp_secret
         self.session = requests.Session()
+        self.session.headers.update(BROWSER_HEADERS)
 
     def _request_token(self):
         resp = self.session.post(LOGIN_URL, data={
             'user_id': self.user_id,
             'password': self.password,
         }, timeout=30)
-        resp.raise_for_status()
+        if resp.status_code != 200:
+            raise KiteLoginError(
+                'Zerodha login (step 1) request failed with HTTP %d. Response body '
+                '(often reveals a WAF/bot-block page vs. a real API error): %s'
+                % (resp.status_code, resp.text[:2000])
+            )
         payload = resp.json()
         if payload.get('status') != 'success':
             raise KiteLoginError('Zerodha login (step 1) failed: %s' % payload.get('message'))
