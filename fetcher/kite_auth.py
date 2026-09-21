@@ -92,9 +92,13 @@ class KiteTOTPLogin:
                 break
 
         if not request_token:
+            redirect_chain = ' -> '.join(r.url for r in list(login_redirect.history) + [login_redirect])
             raise KiteLoginError(
-                'Could not extract request_token from Zerodha login redirect. '
-                'The login flow may have changed, or 2FA/TOTP failed silently.'
+                'Could not extract request_token from Zerodha login redirect. This app may need a '
+                'one-time manual authorization (Kite Connect shows a consent/"Authorize app" screen the '
+                'first time an app is used), or the login flow has changed.\n'
+                'Final URL: %s\nRedirect chain: %s\nPage snippet: %s'
+                % (login_redirect.url, redirect_chain, login_redirect.text[:1500])
             )
         return request_token
 
