@@ -3,9 +3,20 @@
 {% block content %}
 <section class="panel">
   <div class="filters">
-    <a href="/positions" class="{{ 'active' if not state else '' }}">All</a>
-    <a href="/positions?state=open" class="{{ 'active' if state == 'open' else '' }}">Open</a>
-    <a href="/positions?state=closed" class="{{ 'active' if state == 'closed' else '' }}">Closed</a>
+    <a href="/positions{{ '?fy=' ~ fy if fy }}" class="{{ 'active' if not state else '' }}">All</a>
+    <a href="/positions?state=open{{ '&fy=' ~ fy if fy }}" class="{{ 'active' if state == 'open' else '' }}">Open</a>
+    <a href="/positions?state=closed{{ '&fy=' ~ fy if fy }}" class="{{ 'active' if state == 'closed' else '' }}">Closed</a>
+
+    <form method="get" action="/positions" class="fy-form">
+      {% if state %}<input type="hidden" name="state" value="{{ state }}">{% endif %}
+      {% if product %}<input type="hidden" name="product" value="{{ product }}">{% endif %}
+      <select name="fy" onchange="this.form.submit()">
+        <option value="">All years</option>
+        {% for f in available_fys %}
+        <option value="{{ f }}" {{ 'selected' if fy == f else '' }}>FY {{ f }}</option>
+        {% endfor %}
+      </select>
+    </form>
   </div>
   <table class="data-table">
     <thead>
