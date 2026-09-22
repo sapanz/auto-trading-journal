@@ -102,9 +102,14 @@ nav a:hover { color: var(--accent); }
 .tag-scalp { background: rgba(37, 99, 235, .15); color: var(--accent); }
 .tag-revenge { background: rgba(234, 88, 12, .15); color: #ea580c; }
 
-.filters { margin-bottom: 16px; }
+.filters { margin-bottom: 16px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
 .filters a { margin-right: 12px; color: var(--muted); text-decoration: none; font-size: 14px; }
 .filters a.active { color: var(--accent); font-weight: 600; }
+.fy-form { margin-left: auto; }
+.fy-form select {
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 8px; font-size: 14px; font-family: inherit;
+}
 
 .detail-grid {
   display: grid;

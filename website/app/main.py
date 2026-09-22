@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from . import models, schemas
 from .database import Base, engine, get_db
+from .fy import fy_bounds, fy_options
 from .insights import generate_weekly_insight
 from .matching import ingest_trades
 
@@ -45,6 +46,22 @@ def api_ingest_trades(
 ):
     result = ingest_trades(db, [t.to_dict() for t in payload.trades])
     return JSONResponse(result)
+
+
+@app.delete("/api/trades")
+def api_reset_all_data(db: Session = Depends(get_db), _=Depends(check_api_key)):
+    """Wipe every trade/position/insight (tags are kept, they're just labels).
+    Meant for clearing test data or resetting before a clean re-import —
+    there is no undo. Association tables are cleared explicitly first since
+    bulk Query.delete() doesn't cascade through them."""
+    db.execute(models.position_tags.delete())
+    db.execute(models.position_entry_trades.delete())
+    db.execute(models.position_exit_trades.delete())
+    db.query(models.Position).delete()
+    db.query(models.Trade).delete()
+    db.query(models.Insight).delete()
+    db.commit()
+    return JSONResponse({"status": "reset"})
 
 
 @app.get("/")
@@ -91,18 +108,33 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
 
 
 @app.get("/positions")
-def positions_list(request: Request, db: Session = Depends(get_db), state: str | None = None, product: str | None = None):
-    order_key = func.coalesce(models.Position.exit_time, models.Position.entry_time)
-    query = db.query(models.Position).order_by(order_key.desc())
+def positions_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    state: str | None = None,
+    product: str | None = None,
+    fy: str | None = None,
+):
+    order_col = func.coalesce(models.Position.exit_date, models.Position.entry_date)
+    query = db.query(models.Position).order_by(
+        func.coalesce(models.Position.exit_time, models.Position.entry_time).desc()
+    )
     if state in ("open", "closed"):
         query = query.filter(models.Position.state == state)
     if product in ("CNC", "MIS", "NRML"):
         query = query.filter(models.Position.product == product)
-    positions = query.limit(300).all()
+    if fy:
+        fy_start, fy_end = fy_bounds(fy)
+        query = query.filter(order_col >= fy_start, order_col <= fy_end)
+    positions = query.limit(500).all()
+
+    bounds = db.query(func.min(order_col), func.max(order_col)).one()
+    available_fys = fy_options(bounds[0], bounds[1])
+
     return templates.TemplateResponse(
         request,
         "positions.html",
-        {"positions": positions, "state": state, "product": product},
+        {"positions": positions, "state": state, "product": product, "fy": fy, "available_fys": available_fys},
     )
 
 
