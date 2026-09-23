@@ -24,13 +24,13 @@ def generate_weekly_insight(db: Session):
     if not positions:
         return None
 
-    total_pnl = sum(p.pnl for p in positions)
+    total_pnl = sum(p.net_pnl for p in positions)
     wins = [p for p in positions if p.is_win]
     win_rate = (len(wins) / len(positions) * 100.0) if positions else 0.0
 
     by_symbol: dict[str, float] = {}
     for p in positions:
-        by_symbol[p.tradingsymbol] = by_symbol.get(p.tradingsymbol, 0.0) + p.pnl
+        by_symbol[p.tradingsymbol] = by_symbol.get(p.tradingsymbol, 0.0) + p.net_pnl
     best_symbol = max(by_symbol, key=by_symbol.get) if by_symbol else "-"
     worst_symbol = min(by_symbol, key=by_symbol.get) if by_symbol else "-"
 

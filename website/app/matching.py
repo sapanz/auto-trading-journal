@@ -5,6 +5,7 @@ from collections import deque
 from sqlalchemy.orm import Session
 
 from . import models
+from .charges import estimate_charges
 
 QTY_EPSILON = 1e-6
 
@@ -93,6 +94,11 @@ def recompute_fifo(db: Session, tradingsymbol: str, product: str):
             pnl_percent = (pnl / entry_value * 100.0) if entry_value else 0.0
             holding_minutes = (leg.exchange_timestamp - chunk["time"]).total_seconds() / 60.0
 
+            charge_breakdown = estimate_charges(product, closes_direction, entry_value, exit_value)
+            total_charges = charge_breakdown["total"]
+            net_pnl = pnl - total_charges
+            net_pnl_percent = (net_pnl / entry_value * 100.0) if entry_value else 0.0
+
             pos = models.Position(
                 tradingsymbol=tradingsymbol,
                 product=product,
@@ -109,7 +115,10 @@ def recompute_fifo(db: Session, tradingsymbol: str, product: str):
                 exit_price=leg.price,
                 pnl=pnl,
                 pnl_percent=pnl_percent,
-                is_win=1 if pnl > 0 else 0,
+                charges=total_charges,
+                net_pnl=net_pnl,
+                net_pnl_percent=net_pnl_percent,
+                is_win=1 if net_pnl > 0 else 0,
                 holding_minutes=holding_minutes,
             )
             pos.entry_trades.append(chunk["trade"])
@@ -176,9 +185,9 @@ def _apply_discipline_tags(db: Session, positions: list):
     for pos in positions:
         if pos.state != "closed":
             continue
-        if pos.pnl_percent <= -big_loss_pct and tag_big_loss not in pos.tags:
+        if pos.net_pnl_percent <= -big_loss_pct and tag_big_loss not in pos.tags:
             pos.tags.append(tag_big_loss)
-        if pos.pnl_percent >= big_loss_pct * 2 and tag_big_win not in pos.tags:
+        if pos.net_pnl_percent >= big_loss_pct * 2 and tag_big_win not in pos.tags:
             pos.tags.append(tag_big_win)
         if pos.product == "MIS" and 0 < pos.holding_minutes < 2 and tag_scalp not in pos.tags:
             pos.tags.append(tag_scalp)
@@ -192,7 +201,7 @@ def _flag_revenge_trades(db: Session, positions: list, tag_revenge: models.Tag):
     same symbol, with a bigger size than the losing trade — a common
     emotional-trading pattern."""
     for pos in positions:
-        if pos.state != "closed" or pos.pnl >= 0 or not pos.exit_time:
+        if pos.state != "closed" or pos.net_pnl >= 0 or not pos.exit_time:
             continue
         window_end = pos.exit_time + dt.timedelta(minutes=10)
         next_trade = (

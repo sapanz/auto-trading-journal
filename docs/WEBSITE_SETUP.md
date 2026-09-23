@@ -103,6 +103,49 @@ delivery (CNC). This gets ordinary days right, but can misclassify a rare
 day where you both day-traded *and* separately adjusted a holding in the
 same symbol. See the docstring in `import_tradebook.py` for details.
 
+## 3c. Realized P&L (charges included)
+
+Neither Kite Connect's `trades()` API nor the Tradebook CSV export include
+brokerage, STT, exchange charges, stamp duty, or GST — those only appear on
+contract notes / Console's Tax P&L report, which nothing here imports. So
+`website/app/charges.py` estimates them per closed position from Zerodha's
+published retail equity charge structure (brokerage, STT, exchange
+transaction charges, SEBI charges, stamp duty, GST), given the round trip's
+product (CNC/MIS/NRML), direction, and buy/sell value.
+
+Every closed position now has both:
+- **Gross P&L** — pure price movement (what `pnl` always meant before).
+- **Charges** — the estimated total above.
+- **Net P&L** — `pnl - charges`, the realized figure; this is what the
+  dashboard total, the win/loss coloring, ROI %, and the discipline tags
+  (Big Loss/Big Win/revenge-trade) are now based on.
+
+**Known limitations** (see the docstring in `charges.py` for the exact
+rates used): this models plain equity delivery and intraday/carry-forward
+only, not F&O's different STT/brokerage rules; it doesn't include the flat
+per-scrip DP charge on delivery sells (~Rs 15-20/scrip/day, independent of
+value, which would need day-level grouping to attribute); and the rates
+are current as of when this was written but Zerodha/SEBI/GST can change
+them. Override the per-unit rates via `JOURNAL_CHARGES_*` environment
+variables if you need to tune them (see `charges.py`).
+
+Upgrading an existing deployment: the app auto-adds the new `charges` /
+`net_pnl` / `net_pnl_percent` columns to the `positions` table on startup
+(see `run_migrations()` in `database.py`) — no manual DB change needed. But
+existing positions won't have charges backfilled automatically, since
+re-running the CSV importer skips trades it's already seen and only
+recomputes positions touched by genuinely new trades. To backfill charges
+onto positions built before this change, call the new recompute endpoint
+once after deploying:
+
+```bash
+curl -X POST "$JOURNAL_URL/api/positions/recompute" \
+  -H "X-Api-Key: <your JOURNAL_API_KEY>"
+```
+
+This rebuilds every position from its existing trade legs (same FIFO logic,
+now with charges) without touching the underlying trades.
+
 ## 4. Deploying
 
 ### Free, no-card option: Vercel (compute) + Neon (Postgres)

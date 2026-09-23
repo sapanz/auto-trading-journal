@@ -33,3 +33,25 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def run_migrations():
+    """Base.metadata.create_all only creates missing tables, it doesn't
+    alter existing ones -- so columns added after the first deploy (e.g.
+    the charges/net_pnl fields) need to be added by hand here. Safe to call
+    on every startup; only adds a column if it isn't already there."""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    if "positions" not in inspector.get_table_names():
+        return
+    existing_cols = {c["name"] for c in inspector.get_columns("positions")}
+    new_columns = {
+        "charges": "FLOAT DEFAULT 0",
+        "net_pnl": "FLOAT DEFAULT 0",
+        "net_pnl_percent": "FLOAT DEFAULT 0",
+    }
+    with engine.begin() as conn:
+        for name, ddl_type in new_columns.items():
+            if name not in existing_cols:
+                conn.execute(text(f"ALTER TABLE positions ADD COLUMN {name} {ddl_type}"))

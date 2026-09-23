@@ -87,9 +87,12 @@ class Position(Base):
     entry_price = Column(Float, default=0.0)
     exit_price = Column(Float, default=0.0)
 
-    pnl = Column(Float, default=0.0)
+    pnl = Column(Float, default=0.0)  # gross, before charges
     pnl_percent = Column(Float, default=0.0)
-    is_win = Column(Integer, default=0)  # sqlite has no bool type; 0/1
+    charges = Column(Float, default=0.0)  # estimated brokerage/STT/taxes for this round trip (see charges.py)
+    net_pnl = Column(Float, default=0.0)  # pnl - charges: the realized P&L
+    net_pnl_percent = Column(Float, default=0.0)
+    is_win = Column(Integer, default=0)  # sqlite has no bool type; 0/1 — based on net_pnl
     holding_minutes = Column(Float, default=0.0)
 
     notes = Column(Text)
