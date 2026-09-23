@@ -84,6 +84,39 @@
   <canvas id="drawdownChart" height="70"></canvas>
 </section>
 
+<section class="panel">
+  <h2>Daily P&amp;L Calendar</h2>
+  <div class="heatmap-container">
+    <div class="heatmap-months">
+      {% for m in heatmap_months %}
+      <span style="grid-column: {{ m.week_index + 1 }};">{{ m.label }}</span>
+      {% endfor %}
+    </div>
+    <div class="heatmap">
+      {% for week in heatmap_weeks %}
+        {% for cell in week %}
+        <div class="heatmap-cell hm-{{ cell.level }}"
+             {% if cell.date %}title="{{ cell.date }}: {{ '%.2f'|format(cell.pnl) if cell.pnl is not none else 'No trades' }}"{% endif %}></div>
+        {% endfor %}
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Benchmark — vs {{ benchmark_data.symbol if benchmark_data else 'Nifty 50' }}</h2>
+  {% if benchmark_data %}
+    <canvas id="benchmarkChart" height="80"></canvas>
+    {% if benchmark_data.your_series %}
+    <p class="muted-note">Both lines normalized to 100 at the start of this FY's trading. Your line uses <code>JOURNAL_CAPITAL_BASE</code> ({{ "%.0f"|format(benchmark_data.capital_base) }}) as the denominator for a % return — set that env var to your approximate deployed trading capital for an accurate comparison.</p>
+    {% else %}
+    <p class="muted-note">Showing {{ benchmark_data.symbol }}'s trend over your trading period for reference. To overlay your own % return on the same scale, set the <code>JOURNAL_CAPITAL_BASE</code> environment variable to your approximate trading capital.</p>
+    {% endif %}
+  {% else %}
+    <p class="muted-note">Benchmark data isn't available right now (no cached data yet and the live fetch didn't succeed, or there are no trades yet this FY to anchor the comparison to). This uses an unofficial free data source and may be temporarily unavailable — it'll retry on your next visit.</p>
+  {% endif %}
+</section>
+
 <div class="two-col">
   <section class="panel">
     <h2>P&amp;L by Day of Week</h2>
@@ -139,6 +172,26 @@
   </section>
 </div>
 
+<section class="panel">
+  <h2>Performance by Strategy Tag</h2>
+  <p class="muted-note">User-added tags only (from the "Add strategy tag" box on a trade's detail page) — automatic discipline tags like Big Loss/Big Win describe outcomes, not strategies, so they're excluded here.</p>
+  <table class="data-table">
+    <thead><tr><th>Tag</th><th>Net P&amp;L</th><th>Trades</th><th>Win %</th></tr></thead>
+    <tbody>
+      {% for r in tag_rows %}
+      <tr>
+        <td><span class="tag tag-custom">{{ r.tag }}</span></td>
+        <td class="{{ 'positive' if r.pnl > 0 else ('negative' if r.pnl < 0 else '') }}">{{ "%.2f"|format(r.pnl) }}</td>
+        <td>{{ r.count }}</td>
+        <td>{{ r.win_rate }}%</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4">No strategy tags added yet this FY.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
 <script>
   const equityValues = {{ cumulative|tojson }};
   const equityLabels = {{ equity_labels|tojson }};
@@ -179,6 +232,37 @@
       scales: { y: { beginAtZero: true } },
     },
   });
+
+  {% if benchmark_data %}
+  new Chart(document.getElementById('benchmarkChart'), {
+    type: 'line',
+    data: {
+      labels: {{ benchmark_data['labels']|tojson }},
+      datasets: [
+        {
+          label: '{{ benchmark_data.symbol }}',
+          data: {{ benchmark_data['values']|tojson }},
+          borderColor: '#94a3b8',
+          pointRadius: 0,
+          fill: false,
+        },
+        {% if benchmark_data.your_series %}
+        {
+          label: 'You',
+          data: {{ benchmark_data.your_series['values']|tojson }},
+          borderColor: '#2563eb',
+          pointRadius: 0,
+          fill: false,
+        },
+        {% endif %}
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: true } },
+    },
+  });
+  {% endif %}
 
   new Chart(document.getElementById('drawdownChart'), {
     type: 'line',

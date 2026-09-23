@@ -1,6 +1,6 @@
 import datetime as dt
 
-from sqlalchemy import Column, Integer, String, Float, Date, DateTime, Text, ForeignKey, Table
+from sqlalchemy import Column, Integer, String, Float, Date, DateTime, Text, ForeignKey, Table, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .database import Base
@@ -57,6 +57,7 @@ class Tag(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, unique=True, nullable=False)
     css_class = Column(String, default="tag-default")
+    is_system = Column(Integer, default=0)  # 0/1: auto-applied discipline tag vs user-created strategy tag
 
 
 class Position(Base):
@@ -101,6 +102,19 @@ class Position(Base):
     tags = relationship("Tag", secondary=position_tags, backref="positions")
     entry_trades = relationship("Trade", secondary=position_entry_trades)
     exit_trades = relationship("Trade", secondary=position_exit_trades)
+
+
+class BenchmarkPrice(Base):
+    """Cached daily closing price for an index (e.g. Nifty 50), fetched
+    from an external source (see benchmark.py) so the Analytics page's
+    benchmark comparison doesn't re-fetch on every request."""
+    __tablename__ = "benchmark_prices"
+    __table_args__ = (UniqueConstraint("symbol", "date", name="uq_benchmark_symbol_date"),)
+
+    id = Column(Integer, primary_key=True)
+    symbol = Column(String, nullable=False, index=True)
+    date = Column(Date, nullable=False, index=True)
+    close = Column(Float, nullable=False)
 
 
 class Insight(Base):

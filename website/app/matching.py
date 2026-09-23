@@ -162,10 +162,10 @@ def recompute_fifo(db: Session, tradingsymbol: str, product: str):
     return new_positions
 
 
-def _get_or_create_tag(db: Session, name: str, css_class: str) -> models.Tag:
+def _get_or_create_tag(db: Session, name: str, css_class: str, is_system: bool = False) -> models.Tag:
     tag = db.query(models.Tag).filter_by(name=name).first()
     if not tag:
-        tag = models.Tag(name=name, css_class=css_class)
+        tag = models.Tag(name=name, css_class=css_class, is_system=1 if is_system else 0)
         db.add(tag)
         db.flush()
     return tag
@@ -177,10 +177,10 @@ def _apply_discipline_tags(db: Session, positions: list):
     digest built on top of these)."""
     big_loss_pct = float(os.environ.get("JOURNAL_BIG_LOSS_PERCENT", "2.0"))
 
-    tag_big_loss = _get_or_create_tag(db, "Big Loss", "tag-loss")
-    tag_big_win = _get_or_create_tag(db, "Big Win", "tag-win")
-    tag_scalp = _get_or_create_tag(db, "Quick Scalp", "tag-scalp")
-    tag_revenge = _get_or_create_tag(db, "Possible Revenge Trade", "tag-revenge")
+    tag_big_loss = _get_or_create_tag(db, "Big Loss", "tag-loss", is_system=True)
+    tag_big_win = _get_or_create_tag(db, "Big Win", "tag-win", is_system=True)
+    tag_scalp = _get_or_create_tag(db, "Quick Scalp", "tag-scalp", is_system=True)
+    tag_revenge = _get_or_create_tag(db, "Possible Revenge Trade", "tag-revenge", is_system=True)
 
     for pos in positions:
         if pos.state != "closed":
