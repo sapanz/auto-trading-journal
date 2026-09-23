@@ -1,6 +1,7 @@
+import calendar
 import hmac
 import os
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Form, Header, HTTPException, Request
@@ -12,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from . import models, schemas
 from .database import Base, engine, get_db, run_migrations
-from .fy import fy_bounds, fy_options
+from .fy import fy_bounds, fy_label_for_date, fy_options
 from .insights import generate_weekly_insight
 from .matching import ingest_trades, recompute_fifo
 
@@ -79,7 +80,7 @@ def api_recompute_positions(db: Session = Depends(get_db), _=Depends(check_api_k
 
 
 @app.get("/")
-def dashboard(request: Request, db: Session = Depends(get_db)):
+def dashboard(request: Request, db: Session = Depends(get_db), fy: str | None = None):
     closed_q = db.query(models.Position).filter(models.Position.state == "closed")
     total_pnl = closed_q.with_entities(func.coalesce(func.sum(models.Position.net_pnl), 0.0)).scalar()
     total_gross_pnl = closed_q.with_entities(func.coalesce(func.sum(models.Position.pnl), 0.0)).scalar()
@@ -97,16 +98,39 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         .all()
     )
 
-    since = date.today() - timedelta(days=30)
+    bounds = closed_q.with_entities(func.min(models.Position.exit_date), func.max(models.Position.exit_date)).one()
+    available_fys = fy_options(bounds[0], bounds[1])
+    selected_fy = fy if fy in available_fys else (available_fys[0] if available_fys else fy_label_for_date(date.today()))
+
+    fy_start, fy_end = fy_bounds(selected_fy)
     daily_rows = (
         db.query(models.Position.exit_date, func.sum(models.Position.net_pnl))
-        .filter(models.Position.state == "closed", models.Position.exit_date >= since)
+        .filter(models.Position.state == "closed", models.Position.exit_date >= fy_start, models.Position.exit_date <= fy_end)
         .group_by(models.Position.exit_date)
         .order_by(models.Position.exit_date)
         .all()
     )
-    chart_labels = [row[0].isoformat() for row in daily_rows]
-    chart_values = [round(row[1], 2) for row in daily_rows]
+
+    # Cumulative equity curve across the FY -- unlike a trailing-N-days bar
+    # chart, this doesn't go blank during a stretch of no trades.
+    cumulative_labels = [row[0].isoformat() for row in daily_rows]
+    cumulative_values = []
+    running = 0.0
+    for _, day_pnl in daily_rows:
+        running += day_pnl
+        cumulative_values.append(round(running, 2))
+
+    # Month-by-month P&L for the FY (Apr..Mar), with every month present
+    # even if it had no trades, so a quiet month reads as a zero bar
+    # instead of just disappearing.
+    month_totals = {}
+    for exit_date, day_pnl in daily_rows:
+        key = (exit_date.year, exit_date.month)
+        month_totals[key] = month_totals.get(key, 0.0) + day_pnl
+    fy_start_year = fy_start.year
+    month_keys = [(fy_start_year, m) for m in range(4, 13)] + [(fy_start_year + 1, m) for m in range(1, 4)]
+    monthly_labels = [f"{calendar.month_abbr[m]} {y}" for y, m in month_keys]
+    monthly_values = [round(month_totals.get(key, 0.0), 2) for key in month_keys]
 
     return templates.TemplateResponse(
         request,
@@ -119,8 +143,12 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
             "win_rate": win_rate,
             "open_count": open_count,
             "recent": recent,
-            "chart_labels": chart_labels,
-            "chart_values": chart_values,
+            "fy": selected_fy,
+            "available_fys": available_fys,
+            "cumulative_labels": cumulative_labels,
+            "cumulative_values": cumulative_values,
+            "monthly_labels": monthly_labels,
+            "monthly_values": monthly_values,
         },
     )
 
