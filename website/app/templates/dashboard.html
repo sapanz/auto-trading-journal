@@ -36,8 +36,20 @@
 </section>
 
 <section class="panel">
-  <h2>Net P&amp;L — last 30 days</h2>
-  <canvas id="pnlChart" height="90"></canvas>
+  <div class="filters">
+    <h2 style="margin: 0;">Performance — FY {{ fy }}</h2>
+    <form method="get" action="/" class="fy-form">
+      <select name="fy" onchange="this.form.submit()">
+        {% for f in available_fys %}
+        <option value="{{ f }}" {{ 'selected' if fy == f else '' }}>FY {{ f }}</option>
+        {% endfor %}
+      </select>
+    </form>
+  </div>
+  <h3>Cumulative Net P&amp;L</h3>
+  <canvas id="cumulativeChart" height="80"></canvas>
+  <h3>Monthly Net P&amp;L</h3>
+  <canvas id="monthlyChart" height="90"></canvas>
 </section>
 
 <section class="panel">
@@ -72,16 +84,37 @@
 </section>
 
 <script>
-  const ctx = document.getElementById('pnlChart');
-  const chartValues = {{ chart_values|tojson }};
-  new Chart(ctx, {
+  const cumulativeValues = {{ cumulative_values|tojson }};
+  new Chart(document.getElementById('cumulativeChart'), {
+    type: 'line',
+    data: {
+      labels: {{ cumulative_labels|tojson }},
+      datasets: [{
+        label: 'Cumulative Net P&L',
+        data: cumulativeValues,
+        borderColor: '#2563eb',
+        backgroundColor: 'rgba(37, 99, 235, .12)',
+        fill: true,
+        tension: 0.15,
+        pointRadius: 0,
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true } },
+    },
+  });
+
+  const monthlyValues = {{ monthly_values|tojson }};
+  new Chart(document.getElementById('monthlyChart'), {
     type: 'bar',
     data: {
-      labels: {{ chart_labels|tojson }},
+      labels: {{ monthly_labels|tojson }},
       datasets: [{
-        label: 'P&L',
-        data: chartValues,
-        backgroundColor: chartValues.map((v) => (v >= 0 ? '#16a34a' : '#dc2626')),
+        label: 'Net P&L',
+        data: monthlyValues,
+        backgroundColor: monthlyValues.map((v) => (v >= 0 ? '#16a34a' : '#dc2626')),
       }],
     },
     options: {

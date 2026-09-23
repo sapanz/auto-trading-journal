@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+{% block title %}Analytics · Trading Journal{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="filters">
+    <h1 style="margin: 0;">Analytics — FY {{ fy }}</h1>
+    <form method="get" action="/analytics" class="fy-form">
+      <select name="fy" onchange="this.form.submit()">
+        {% for f in available_fys %}
+        <option value="{{ f }}" {{ 'selected' if fy == f else '' }}>FY {{ f }}</option>
+        {% endfor %}
+      </select>
+    </form>
+  </div>
+</section>
+
+<section class="stat-grid">
+  <div class="stat-card">
+    <span class="stat-label">Trades (closed)</span>
+    <span class="stat-value">{{ stats.trade_count }}</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">Win Rate</span>
+    <span class="stat-value">{{ "%.1f"|format(stats.win_rate) }}%</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">Profit Factor</span>
+    <span class="stat-value">{{ "%.2f"|format(stats.profit_factor) if stats.profit_factor is not none else '—' }}</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">Expectancy / Trade</span>
+    <span class="stat-value {{ 'positive' if stats.expectancy > 0 else ('negative' if stats.expectancy < 0 else '') }}">{{ "%.2f"|format(stats.expectancy) }}</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">Avg Win / Avg Loss</span>
+    <span class="stat-value"><span class="positive">{{ "%.2f"|format(stats.avg_win) }}</span> / <span class="negative">{{ "%.2f"|format(stats.avg_loss) }}</span></span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">Largest Win / Loss</span>
+    <span class="stat-value"><span class="positive">{{ "%.2f"|format(stats.largest_win) }}</span> / <span class="negative">{{ "%.2f"|format(stats.largest_loss) }}</span></span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">Max Drawdown</span>
+    <span class="stat-value negative">{{ "%.2f"|format(max_drawdown) }}</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">Current Streak</span>
+    <span class="stat-value {{ 'positive' if streaks.current_type == 'win' else ('negative' if streaks.current_type == 'loss' else '') }}">
+      {{ streaks.current_len if streaks.current_type else '—' }} {{ streaks.current_type or '' }}
+    </span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">Best Win / Worst Loss Streak</span>
+    <span class="stat-value">{{ streaks.best_win_streak }} / {{ streaks.worst_loss_streak }}</span>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Equity Curve{{ ' + Projection' if forecast }}</h2>
+  <canvas id="equityChart" height="90"></canvas>
+  {% if is_current_fy %}
+    {% if forecast %}
+    <p class="muted-note">
+      <strong>Projected FY-end Net P&amp;L: {{ "%.2f"|format(forecast.projected_fy_end) }}</strong>
+      — a straight-line extrapolation of your last {{ cumulative|length if cumulative|length < 20 else 20 }} trading days'
+      pace ({{ "%.2f"|format(forecast.slope_per_trading_day) }}/trading day) over the
+      {{ forecast.remaining_trading_days }} trading days left in FY {{ fy }}.
+      This is a projection of <em>your own recent consistency</em>, not a market forecast — it assumes
+      you keep trading the way you have been, and says nothing about any individual future trade.
+    </p>
+    {% else %}
+    <p class="muted-note">Not enough trading days yet this FY to project a trend.</p>
+    {% endif %}
+  {% else %}
+    <p class="muted-note">Trend projection is only shown for the current FY ({{ current_fy_label }}) — {{ fy }} is a closed year.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Drawdown</h2>
+  <canvas id="drawdownChart" height="70"></canvas>
+</section>
+
+<div class="two-col">
+  <section class="panel">
+    <h2>P&amp;L by Day of Week</h2>
+    <canvas id="weekdayChart" height="100"></canvas>
+  </section>
+  <section class="panel">
+    <h2>P&amp;L by Exit Hour</h2>
+    <canvas id="hourChart" height="100"></canvas>
+  </section>
+</div>
+
+<section class="panel">
+  <h2>Trade P&amp;L Distribution</h2>
+  <canvas id="histChart" height="80"></canvas>
+</section>
+
+<div class="two-col">
+  <section class="panel">
+    <h2>Performance by Symbol</h2>
+    <table class="data-table">
+      <thead><tr><th>Symbol</th><th>Net P&amp;L</th><th>Trades</th><th>Win %</th></tr></thead>
+      <tbody>
+        {% for r in symbol_rows[:10] %}
+        <tr>
+          <td>{{ r.symbol }}</td>
+          <td class="{{ 'positive' if r.pnl > 0 else ('negative' if r.pnl < 0 else '') }}">{{ "%.2f"|format(r.pnl) }}</td>
+          <td>{{ r.count }}</td>
+          <td>{{ r.win_rate }}%</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4">No closed trades in this FY.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  <section class="panel">
+    <h2>Performance by Product</h2>
+    <table class="data-table">
+      <thead><tr><th>Product</th><th>Net P&amp;L</th><th>Trades</th><th>Win %</th></tr></thead>
+      <tbody>
+        {% for r in product_rows %}
+        <tr>
+          <td>{{ r.product }}</td>
+          <td class="{{ 'positive' if r.pnl > 0 else ('negative' if r.pnl < 0 else '') }}">{{ "%.2f"|format(r.pnl) }}</td>
+          <td>{{ r.count }}</td>
+          <td>{{ r.win_rate }}%</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4">No closed trades in this FY.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</div>
+
+<script>
+  const equityValues = {{ cumulative|tojson }};
+  const equityLabels = {{ equity_labels|tojson }};
+  {% if forecast %}
+  const forecastLabels = {{ forecast['labels']|tojson }};
+  const forecastValues = {{ forecast['values']|tojson }};
+  {% endif %}
+
+  new Chart(document.getElementById('equityChart'), {
+    type: 'line',
+    data: {
+      labels: {% if forecast %}equityLabels.concat(forecastLabels.slice(1)){% else %}equityLabels{% endif %},
+      datasets: [
+        {
+          label: 'Actual',
+          data: equityValues,
+          borderColor: '#2563eb',
+          backgroundColor: 'rgba(37, 99, 235, .12)',
+          fill: true,
+          tension: 0.15,
+          pointRadius: 0,
+        },
+        {% if forecast %}
+        {
+          label: 'Projected',
+          data: new Array(equityValues.length - 1).fill(null).concat(forecastValues),
+          borderColor: '#94a3b8',
+          borderDash: [6, 4],
+          pointRadius: 0,
+          fill: false,
+        },
+        {% endif %}
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: {{ 'true' if forecast else 'false' }} } },
+      scales: { y: { beginAtZero: true } },
+    },
+  });
+
+  new Chart(document.getElementById('drawdownChart'), {
+    type: 'line',
+    data: {
+      labels: equityLabels,
+      datasets: [{
+        label: 'Drawdown',
+        data: {{ drawdown|tojson }},
+        borderColor: '#dc2626',
+        backgroundColor: 'rgba(220, 38, 38, .12)',
+        fill: true,
+        tension: 0.1,
+        pointRadius: 0,
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: { y: { max: 0 } },
+    },
+  });
+
+  const weekdayValues = {{ weekday_values|tojson }};
+  new Chart(document.getElementById('weekdayChart'), {
+    type: 'bar',
+    data: {
+      labels: {{ weekday_labels|tojson }},
+      datasets: [{
+        label: 'Net P&L',
+        data: weekdayValues,
+        backgroundColor: weekdayValues.map((v) => (v >= 0 ? '#16a34a' : '#dc2626')),
+      }],
+    },
+    options: { responsive: true, plugins: { legend: { display: false } } },
+  });
+
+  const hourValues = {{ hour_values|tojson }};
+  new Chart(document.getElementById('hourChart'), {
+    type: 'bar',
+    data: {
+      labels: {{ hour_labels|tojson }},
+      datasets: [{
+        label: 'Net P&L',
+        data: hourValues,
+        backgroundColor: hourValues.map((v) => (v >= 0 ? '#16a34a' : '#dc2626')),
+      }],
+    },
+    options: { responsive: true, plugins: { legend: { display: false } } },
+  });
+
+  const histCounts = {{ hist_counts|tojson }};
+  new Chart(document.getElementById('histChart'), {
+    type: 'bar',
+    data: {
+      labels: {{ hist_labels|tojson }},
+      datasets: [{
+        label: 'Trades',
+        data: histCounts,
+        backgroundColor: '#60a5fa',
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+    },
+  });
+</script>
+{% endblock %}
