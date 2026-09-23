@@ -74,6 +74,35 @@ Set these as GitHub Actions secrets once you've deployed the website
 somewhere reachable from the internet (see below), then trigger the
 workflow manually to test end to end.
 
+## 3b. Backfilling historical trades
+
+`kite.trades()` (what the daily cron uses) only returns the **current
+trading day's** trades — there's no Kite Connect API for pulling past
+trades. To backfill history, use `fetcher/import_tradebook.py` against a
+Tradebook CSV export instead:
+
+1. In Console (console.zerodha.com), go to **Reports → Tradebook**, pick a
+   financial year, and download the CSV. Repeat per year for however far
+   back you want.
+2. With the same `JOURNAL_URL` / `JOURNAL_API_KEY` /
+   `VERCEL_PROTECTION_BYPASS_SECRET` environment variables set locally as
+   the fetcher uses:
+   ```bash
+   cd fetcher
+   pip install -r requirements.txt
+   python import_tradebook.py path/to/tradebook.csv
+   ```
+   Re-running on the same file is safe — trades already present (by
+   `trade_id`) are skipped, not duplicated.
+
+**Known limitation**: the Tradebook export doesn't include a product
+(CNC/MIS/NRML) column, unlike the live API. The importer infers it per
+symbol per day — if that day's total buy quantity exactly matches total
+sell quantity (a net-zero day), it's tagged intraday (MIS); otherwise
+delivery (CNC). This gets ordinary days right, but can misclassify a rare
+day where you both day-traded *and* separately adjusted a holding in the
+same symbol. See the docstring in `import_tradebook.py` for details.
+
 ## 4. Deploying
 
 ### Free, no-card option: Vercel (compute) + Neon (Postgres)
