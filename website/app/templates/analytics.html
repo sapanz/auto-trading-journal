@@ -108,11 +108,13 @@
   {% if benchmark_data %}
     <canvas id="benchmarkChart" height="80"></canvas>
     <p class="muted-note">
-      Both lines normalized to 100 at the start of this FY's trading. "You" is your return on capital actually
-      deployed in trades — each day's net P&amp;L ÷ that day's capital committed, compounded day over day — not
-      your whole account's return, since this app doesn't track idle cash or deposits/withdrawals. If you keep
-      money on the sidelines rather than fully deployed, your real account return will be lower than this line;
-      it answers "how good are my trades," not "how good is my whole portfolio."
+      Both lines start at 100 and each has its own axis (grey = {{ benchmark_data.symbol }} on the left, blue =
+      you on the right) since your day-to-day return on deployed capital is usually far more volatile than the
+      index — sharing one axis would flatten the index's real movement to near-invisible. Because the axes
+      differ, the lines touching or crossing visually does <strong>not</strong> mean equal returns — read each
+      against its own axis. "You" is return on capital actually deployed in trades — each day's net P&amp;L ÷
+      that day's capital committed, compounded day over day — not your whole account's return, since this app
+      doesn't track idle cash or deposits/withdrawals.
     </p>
   {% else %}
     <p class="muted-note">Benchmark data isn't available right now (no cached data yet and the live fetch didn't succeed, or there are no trades yet this FY to anchor the comparison to). This uses an unofficial free data source and may be temporarily unavailable — it'll retry on your next visit.</p>
@@ -247,6 +249,7 @@
           borderColor: '#94a3b8',
           pointRadius: 0,
           fill: false,
+          yAxisID: 'yNifty',
         },
         {% if benchmark_data.your_series %}
         {
@@ -255,6 +258,7 @@
           borderColor: '#2563eb',
           pointRadius: 0,
           fill: false,
+          yAxisID: 'yYou',
         },
         {% endif %}
       ],
@@ -262,6 +266,17 @@
     options: {
       responsive: true,
       plugins: { legend: { display: true } },
+      scales: {
+        yNifty: {
+          type: 'linear', position: 'left',
+          title: { display: true, text: '{{ benchmark_data.symbol }} (indexed to 100)' },
+          grid: { drawOnChartArea: false },
+        },
+        yYou: {
+          type: 'linear', position: 'right',
+          title: { display: true, text: 'You (indexed to 100)' },
+        },
+      },
     },
   });
   {% endif %}
