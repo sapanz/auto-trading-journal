@@ -145,6 +145,35 @@ def product_breakdown(positions):
     return rows
 
 
+def tag_breakdown(positions):
+    """Performance grouped by user-created strategy tag (system/discipline
+    tags like 'Big Loss' are excluded -- those describe outcomes, not
+    strategies, and every losing trade would otherwise show up under
+    itself). A position with multiple strategy tags counts toward each."""
+    agg: dict[str, dict] = {}
+    for p in positions:
+        if p.state != "closed":
+            continue
+        for t in p.tags:
+            if t.is_system:
+                continue
+            d = agg.setdefault(t.name, {"pnl": 0.0, "count": 0, "wins": 0})
+            d["pnl"] += p.net_pnl
+            d["count"] += 1
+            d["wins"] += 1 if p.net_pnl > 0 else 0
+    rows = [
+        {
+            "tag": name,
+            "pnl": round(v["pnl"], 2),
+            "count": v["count"],
+            "win_rate": round(v["wins"] / v["count"] * 100.0, 1) if v["count"] else 0.0,
+        }
+        for name, v in agg.items()
+    ]
+    rows.sort(key=lambda r: r["pnl"], reverse=True)
+    return rows
+
+
 def pnl_histogram(positions, bins=10):
     closed_pnls = [p.net_pnl for p in positions if p.state == "closed"]
     if not closed_pnls:
@@ -195,6 +224,62 @@ def _add_weekdays(start: dt.date, n: int) -> dt.date:
         if d.weekday() < 5:
             added += 1
     return d
+
+
+def _heatmap_level(pnl, max_abs):
+    if pnl is None:
+        return "none"
+    if pnl == 0:
+        return "zero"
+    bucket = min(int(min(abs(pnl) / max_abs, 1.0) * 4) + 1, 4)
+    return f"{'win' if pnl > 0 else 'loss'}-{bucket}"
+
+
+def calendar_heatmap(daily_rows, fy_start: dt.date, fy_end: dt.date):
+    """GitHub-contributions-style grid: one column per week, one cell per
+    day, for the whole FY. Unlike the equity curve this deliberately shows
+    every calendar day (including non-trading days as empty cells) so
+    trading frequency/gaps are visible at a glance.
+    Returns (weeks, month_labels): weeks is a list of 7-cell columns (each
+    cell a dict with date/pnl/level), month_labels is
+    [{"week_index": i, "label": "Apr"}, ...] for positioning header text."""
+    daily_pnl = {d: pnl for d, pnl in daily_rows}
+    max_abs = max((abs(v) for v in daily_pnl.values()), default=0) or 1.0
+
+    grid_start = fy_start - dt.timedelta(days=(fy_start.weekday() + 1) % 7)  # back up to Sunday
+    grid_end = fy_end
+    while grid_end.weekday() != 5:  # forward to Saturday
+        grid_end += dt.timedelta(days=1)
+
+    days = []
+    d = grid_start
+    while d <= grid_end:
+        days.append(d)
+        d += dt.timedelta(days=1)
+    weeks = [days[i:i + 7] for i in range(0, len(days), 7)]
+
+    month_labels = []
+    seen_months = set()
+    for week_index, week in enumerate(weeks):
+        for day in week:
+            if fy_start <= day <= fy_end and (day.year, day.month) not in seen_months:
+                seen_months.add((day.year, day.month))
+                month_labels.append({"week_index": week_index, "label": calendar.month_abbr[day.month]})
+                break
+
+    grid = []
+    for week in weeks:
+        column = []
+        for day in week:
+            in_range = fy_start <= day <= fy_end
+            pnl = daily_pnl.get(day) if in_range else None
+            column.append({
+                "date": day.isoformat() if in_range else None,
+                "pnl": pnl,
+                "level": _heatmap_level(pnl, max_abs) if in_range else "pad",
+            })
+        grid.append(column)
+    return grid, month_labels
 
 
 def project_forward(daily_rows, cumulative, fy_end: dt.date, window: int = 20):

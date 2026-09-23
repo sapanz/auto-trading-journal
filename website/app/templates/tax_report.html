@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Tax Report · Trading Journal{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="filters">
+    <h1 style="margin: 0;">Tax Report — FY {{ fy }}</h1>
+    <form method="get" action="/tax-report" class="fy-form">
+      <select name="fy" onchange="this.form.submit()">
+        {% for f in available_fys %}
+        <option value="{{ f }}" {{ 'selected' if fy == f else '' }}>FY {{ f }}</option>
+        {% endfor %}
+      </select>
+    </form>
+  </div>
+  <p class="muted-note">
+    <strong>Not tax advice.</strong> This is a simplified estimate built from your journal's trade
+    data, meant to help you get organized before filing — not a substitute for a CA or for Zerodha's
+    own official <strong>Tax P&amp;L report</strong> (Console → Reports → Tax P&amp;L), which is the
+    authoritative source. It splits MIS as speculative business income, and CNC into short-term
+    (≤ 365 days held) vs long-term (&gt; 365 days) capital gains — it does not apply grandfathering
+    rules, exemption thresholds, or rate changes across budget years. NRML positions are shown
+    separately as "Other" since this app can't tell from trade data alone whether they were F&amp;O
+    (also non-speculative business income) or equity carried on margin (capital gains like CNC) —
+    classify those yourself.
+  </p>
+  <a href="/api/tax-report/export?fy={{ fy }}" class="brand" style="text-decoration: underline;">Download CSV for FY {{ fy }}</a>
+</section>
+
+<section class="stat-grid">
+  <div class="stat-card">
+    <span class="stat-label">Speculative (MIS)</span>
+    <span class="stat-value {{ 'positive' if report.speculative.net_pnl > 0 else ('negative' if report.speculative.net_pnl < 0 else '') }}">{{ "%.2f"|format(report.speculative.net_pnl) }}</span>
+    <span class="stat-label">{{ report.speculative.count }} trades</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">STCG (CNC ≤ 365d)</span>
+    <span class="stat-value {{ 'positive' if report.stcg.net_pnl > 0 else ('negative' if report.stcg.net_pnl < 0 else '') }}">{{ "%.2f"|format(report.stcg.net_pnl) }}</span>
+    <span class="stat-label">{{ report.stcg.count }} trades</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">LTCG (CNC &gt; 365d)</span>
+    <span class="stat-value {{ 'positive' if report.ltcg.net_pnl > 0 else ('negative' if report.ltcg.net_pnl < 0 else '') }}">{{ "%.2f"|format(report.ltcg.net_pnl) }}</span>
+    <span class="stat-label">{{ report.ltcg.count }} trades</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">Other (NRML)</span>
+    <span class="stat-value {{ 'positive' if report.other.net_pnl > 0 else ('negative' if report.other.net_pnl < 0 else '') }}">{{ "%.2f"|format(report.other.net_pnl) }}</span>
+    <span class="stat-label">{{ report.other.count }} trades</span>
+  </div>
+</section>
+
+{% for category, label in [('speculative', 'Speculative Business Income (MIS)'), ('stcg', 'Short-Term Capital Gains (CNC, ≤ 365 days)'), ('ltcg', 'Long-Term Capital Gains (CNC, > 365 days)'), ('other', 'Other / Ambiguous (NRML)')] %}
+<section class="panel">
+  <h2>{{ label }}</h2>
+  <table class="data-table">
+    <thead>
+      <tr><th>Symbol</th><th>Entry Date</th><th>Exit Date</th><th>Holding Days</th><th>Qty</th><th>Gross P&amp;L</th><th>Charges</th><th>Net P&amp;L</th></tr>
+    </thead>
+    <tbody>
+      {% for p in report.rows[category] %}
+      <tr>
+        <td><a href="/positions/{{ p.id }}">{{ p.tradingsymbol }}</a></td>
+        <td>{{ p.entry_date }}</td>
+        <td>{{ p.exit_date }}</td>
+        <td>{{ (p.exit_date - p.entry_date).days }}</td>
+        <td>{{ p.quantity }}</td>
+        <td class="{{ 'positive' if p.pnl > 0 else ('negative' if p.pnl < 0 else '') }}">{{ "%.2f"|format(p.pnl) }}</td>
+        <td>{{ "%.2f"|format(p.charges) }}</td>
+        <td class="{{ 'positive' if p.net_pnl > 0 else ('negative' if p.net_pnl < 0 else '') }}">{{ "%.2f"|format(p.net_pnl) }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8">None this FY.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endfor %}
+{% endblock %}

@@ -4,14 +4,14 @@ import os
 from datetime import date
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Form, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Form, Header, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from . import analytics, models, schemas
+from . import analytics, benchmark, models, schemas, tax_report
 from .database import Base, engine, get_db, run_migrations
 from .fy import fy_bounds, fy_label_for_date, fy_options
 from .insights import generate_weekly_insight
@@ -188,9 +188,31 @@ def analytics_page(request: Request, db: Session = Depends(get_db), fy: str | No
     weekday_labels, weekday_values, weekday_counts = analytics.weekday_breakdown(positions)
     hour_labels, hour_values = analytics.hour_breakdown(positions)
     hist_labels, hist_counts = analytics.pnl_histogram(positions)
+    heatmap_weeks, heatmap_months = analytics.calendar_heatmap(daily_rows, fy_start, fy_end)
 
     is_current_fy = selected_fy == current_fy_label
     forecast = analytics.project_forward(daily_rows, cumulative, fy_end) if is_current_fy else None
+
+    benchmark_data = None
+    if daily_rows:
+        benchmark_symbol = os.environ.get("JOURNAL_BENCHMARK_SYMBOL", "NIFTY50")
+        capital_base_raw = os.environ.get("JOURNAL_CAPITAL_BASE")
+        capital_base = float(capital_base_raw) if capital_base_raw else None
+        bench_start, bench_end = daily_rows[0][0], min(fy_end, date.today())
+        try:
+            cache_ok = benchmark.ensure_cached(db, benchmark_symbol, bench_start, bench_end)
+            prices = benchmark.get_cached_closes(db, benchmark_symbol, bench_start, bench_end) if cache_ok else []
+        except Exception:
+            prices = []
+        if prices:
+            bench_labels, bench_values = benchmark.normalize_to_100(prices)
+            benchmark_data = {
+                "symbol": benchmark_symbol,
+                "labels": bench_labels,
+                "values": bench_values,
+                "your_series": benchmark.your_normalized_series(daily_rows, capital_base),
+                "capital_base": capital_base,
+            }
 
     return templates.TemplateResponse(
         request,
@@ -213,10 +235,57 @@ def analytics_page(request: Request, db: Session = Depends(get_db), fy: str | No
             "hour_values": hour_values,
             "symbol_rows": analytics.symbol_breakdown(positions),
             "product_rows": analytics.product_breakdown(positions),
+            "tag_rows": analytics.tag_breakdown(positions),
+            "heatmap_weeks": heatmap_weeks,
+            "heatmap_months": heatmap_months,
             "hist_labels": hist_labels,
             "hist_counts": hist_counts,
             "forecast": forecast,
+            "benchmark_data": benchmark_data,
         },
+    )
+
+
+@app.get("/tax-report")
+def tax_report_page(request: Request, db: Session = Depends(get_db), fy: str | None = None):
+    closed_q = db.query(models.Position).filter(models.Position.state == "closed")
+    bounds = closed_q.with_entities(func.min(models.Position.exit_date), func.max(models.Position.exit_date)).one()
+    available_fys = fy_options(bounds[0], bounds[1])
+    selected_fy = fy if fy in available_fys else (available_fys[0] if available_fys else fy_label_for_date(date.today()))
+    fy_start, fy_end = fy_bounds(selected_fy)
+
+    positions = (
+        closed_q.filter(models.Position.exit_date >= fy_start, models.Position.exit_date <= fy_end)
+        .order_by(models.Position.exit_date.asc())
+        .all()
+    )
+    report = tax_report.build_report(positions)
+
+    return templates.TemplateResponse(
+        request,
+        "tax_report.html",
+        {"fy": selected_fy, "available_fys": available_fys, "report": report},
+    )
+
+
+@app.get("/api/tax-report/export")
+def tax_report_export(db: Session = Depends(get_db), fy: str | None = None):
+    closed_q = db.query(models.Position).filter(models.Position.state == "closed")
+    bounds = closed_q.with_entities(func.min(models.Position.exit_date), func.max(models.Position.exit_date)).one()
+    available_fys = fy_options(bounds[0], bounds[1])
+    selected_fy = fy if fy in available_fys else (available_fys[0] if available_fys else fy_label_for_date(date.today()))
+    fy_start, fy_end = fy_bounds(selected_fy)
+
+    positions = (
+        closed_q.filter(models.Position.exit_date >= fy_start, models.Position.exit_date <= fy_end)
+        .order_by(models.Position.exit_date.asc())
+        .all()
+    )
+    csv_body = tax_report.export_csv(tax_report.build_report(positions))
+    return Response(
+        content=csv_body,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="tax_report_FY{selected_fy}.csv"'},
     )
 
 
@@ -278,6 +347,42 @@ def update_position_notes(
     pos.notes = notes
     pos.rating = int(rating) if rating else None
     db.commit()
+    return RedirectResponse(url=f"/positions/{position_id}", status_code=303)
+
+
+@app.post("/positions/{position_id}/tags")
+def add_position_tag(position_id: int, name: str = Form(...), db: Session = Depends(get_db)):
+    """Attach a user-defined strategy tag (created on first use, distinct
+    from the automatic discipline tags applied by matching.py)."""
+    pos = db.get(models.Position, position_id)
+    if not pos:
+        raise HTTPException(404)
+    name = name.strip()
+    if name:
+        tag = db.query(models.Tag).filter_by(name=name).first()
+        if not tag:
+            tag = models.Tag(name=name, css_class="tag-custom", is_system=0)
+            db.add(tag)
+            db.flush()
+        if tag not in pos.tags:
+            pos.tags.append(tag)
+        db.commit()
+    return RedirectResponse(url=f"/positions/{position_id}", status_code=303)
+
+
+@app.post("/positions/{position_id}/tags/{tag_id}/remove")
+def remove_position_tag(position_id: int, tag_id: int, db: Session = Depends(get_db)):
+    pos = db.get(models.Position, position_id)
+    if not pos:
+        raise HTTPException(404)
+    tag = db.get(models.Tag, tag_id)
+    if not tag:
+        raise HTTPException(404)
+    if tag.is_system:
+        raise HTTPException(400, "Automatic discipline tags can't be removed manually")
+    if tag in pos.tags:
+        pos.tags.remove(tag)
+        db.commit()
     return RedirectResponse(url=f"/positions/{position_id}", status_code=303)
 
 

@@ -35,6 +35,9 @@ def get_db():
         db.close()
 
 
+_SYSTEM_TAG_NAMES = ("Big Loss", "Big Win", "Quick Scalp", "Possible Revenge Trade")
+
+
 def run_migrations():
     """Base.metadata.create_all only creates missing tables, it doesn't
     alter existing ones -- so columns added after the first deploy (e.g.
@@ -43,15 +46,29 @@ def run_migrations():
     from sqlalchemy import inspect, text
 
     inspector = inspect(engine)
-    if "positions" not in inspector.get_table_names():
-        return
-    existing_cols = {c["name"] for c in inspector.get_columns("positions")}
-    new_columns = {
-        "charges": "FLOAT DEFAULT 0",
-        "net_pnl": "FLOAT DEFAULT 0",
-        "net_pnl_percent": "FLOAT DEFAULT 0",
-    }
+    table_names = set(inspector.get_table_names())
+
     with engine.begin() as conn:
-        for name, ddl_type in new_columns.items():
-            if name not in existing_cols:
-                conn.execute(text(f"ALTER TABLE positions ADD COLUMN {name} {ddl_type}"))
+        if "positions" in table_names:
+            existing_cols = {c["name"] for c in inspector.get_columns("positions")}
+            new_columns = {
+                "charges": "FLOAT DEFAULT 0",
+                "net_pnl": "FLOAT DEFAULT 0",
+                "net_pnl_percent": "FLOAT DEFAULT 0",
+            }
+            for name, ddl_type in new_columns.items():
+                if name not in existing_cols:
+                    conn.execute(text(f"ALTER TABLE positions ADD COLUMN {name} {ddl_type}"))
+
+        if "tags" in table_names:
+            existing_cols = {c["name"] for c in inspector.get_columns("tags")}
+            if "is_system" not in existing_cols:
+                conn.execute(text("ALTER TABLE tags ADD COLUMN is_system INTEGER DEFAULT 0"))
+                # Backfill: tags that predate this column but match a known
+                # auto-applied discipline tag name were always system tags.
+                placeholders = ", ".join(f":name{i}" for i in range(len(_SYSTEM_TAG_NAMES)))
+                params = {f"name{i}": name for i, name in enumerate(_SYSTEM_TAG_NAMES)}
+                conn.execute(
+                    text(f"UPDATE tags SET is_system = 1 WHERE name IN ({placeholders})"),
+                    params,
+                )

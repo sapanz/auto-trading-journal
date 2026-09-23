@@ -18,8 +18,21 @@
     <div><span class="stat-label">Holding (min)</span><span>{{ "%.1f"|format(pos.holding_minutes) }}</span></div>
   </div>
   <div class="tags-row">
-    {% for t in pos.tags %}<span class="tag {{ t.css_class }}">{{ t.name }}</span>{% endfor %}
+    {% for t in pos.tags %}
+      <span class="tag {{ t.css_class }}">
+        {{ t.name }}
+        {% if not t.is_system %}
+        <form method="post" action="/positions/{{ pos.id }}/tags/{{ t.id }}/remove" style="display: inline;">
+          <button type="submit" class="tag-remove" title="Remove tag">&times;</button>
+        </form>
+        {% endif %}
+      </span>
+    {% endfor %}
   </div>
+  <form method="post" action="/positions/{{ pos.id }}/tags" class="add-tag-form">
+    <input type="text" name="name" placeholder="Add strategy tag (e.g. VWAP Bounce, Earnings Play)" maxlength="40">
+    <button type="submit">Add Tag</button>
+  </form>
 
   <form method="post" action="/positions/{{ pos.id }}/notes" class="notes-form">
     <label for="rating">Self rating</label>
