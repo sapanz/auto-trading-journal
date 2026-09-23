@@ -9,8 +9,10 @@
     <div><span class="stat-label">Quantity</span><span>{{ pos.quantity }}</span></div>
     <div><span class="stat-label">Entry Price</span><span>{{ "%.2f"|format(pos.entry_price) }}</span></div>
     <div><span class="stat-label">Exit Price</span><span>{{ "%.2f"|format(pos.exit_price) if pos.state == 'closed' else '—' }}</span></div>
-    <div><span class="stat-label">P&amp;L</span><span class="{{ 'positive' if pos.pnl > 0 else ('negative' if pos.pnl < 0 else '') }}">{{ "%.2f"|format(pos.pnl) }}</span></div>
-    <div><span class="stat-label">ROI %</span><span>{{ "%.2f"|format(pos.pnl_percent) }}%</span></div>
+    <div><span class="stat-label">Gross P&amp;L</span><span class="{{ 'positive' if pos.pnl > 0 else ('negative' if pos.pnl < 0 else '') }}">{{ "%.2f"|format(pos.pnl) }}</span></div>
+    <div><span class="stat-label">Charges (est.)</span><span>{{ "%.2f"|format(pos.charges) if pos.state == 'closed' else '—' }}</span></div>
+    <div><span class="stat-label">Net P&amp;L</span><span class="{{ 'positive' if pos.net_pnl > 0 else ('negative' if pos.net_pnl < 0 else '') }}">{{ "%.2f"|format(pos.net_pnl) }}</span></div>
+    <div><span class="stat-label">ROI % (net)</span><span>{{ "%.2f"|format(pos.net_pnl_percent) }}%</span></div>
     <div><span class="stat-label">Entry Time</span><span>{{ pos.entry_time }}</span></div>
     <div><span class="stat-label">Exit Time</span><span>{{ pos.exit_time or '—' }}</span></div>
     <div><span class="stat-label">Holding (min)</span><span>{{ "%.1f"|format(pos.holding_minutes) }}</span></div>

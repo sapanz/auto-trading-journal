@@ -6,10 +6,20 @@
 {% block content %}
 <section class="stat-grid">
   <div class="stat-card">
-    <span class="stat-label">Net P&amp;L</span>
+    <span class="stat-label">Net P&amp;L (after charges)</span>
     <span class="stat-value {{ 'positive' if total_pnl > 0 else ('negative' if total_pnl < 0 else '') }}">
       {{ "%.2f"|format(total_pnl) }}
     </span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">Gross P&amp;L</span>
+    <span class="stat-value {{ 'positive' if total_gross_pnl > 0 else ('negative' if total_gross_pnl < 0 else '') }}">
+      {{ "%.2f"|format(total_gross_pnl) }}
+    </span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">Charges (est.)</span>
+    <span class="stat-value">{{ "%.2f"|format(total_charges) }}</span>
   </div>
   <div class="stat-card">
     <span class="stat-label">Win Rate</span>
@@ -26,7 +36,7 @@
 </section>
 
 <section class="panel">
-  <h2>P&amp;L — last 30 days</h2>
+  <h2>Net P&amp;L — last 30 days</h2>
   <canvas id="pnlChart" height="90"></canvas>
 </section>
 
@@ -36,7 +46,7 @@
     <thead>
       <tr>
         <th>Exit Date</th><th>Symbol</th><th>Product</th><th>Dir</th>
-        <th>Qty</th><th>Entry</th><th>Exit</th><th>P&amp;L</th><th>ROI %</th><th>Tags</th>
+        <th>Qty</th><th>Entry</th><th>Exit</th><th>Charges</th><th>Net P&amp;L</th><th>ROI %</th><th>Tags</th>
       </tr>
     </thead>
     <tbody>
@@ -49,12 +59,13 @@
         <td>{{ p.quantity }}</td>
         <td>{{ "%.2f"|format(p.entry_price) }}</td>
         <td>{{ "%.2f"|format(p.exit_price) }}</td>
-        <td class="{{ 'positive' if p.pnl > 0 else ('negative' if p.pnl < 0 else '') }}">{{ "%.2f"|format(p.pnl) }}</td>
-        <td>{{ "%.2f"|format(p.pnl_percent) }}%</td>
+        <td>{{ "%.2f"|format(p.charges) }}</td>
+        <td class="{{ 'positive' if p.net_pnl > 0 else ('negative' if p.net_pnl < 0 else '') }}">{{ "%.2f"|format(p.net_pnl) }}</td>
+        <td>{{ "%.2f"|format(p.net_pnl_percent) }}%</td>
         <td>{% for t in p.tags %}<span class="tag {{ t.css_class }}">{{ t.name }}</span>{% endfor %}</td>
       </tr>
       {% else %}
-      <tr><td colspan="10">No closed trades yet — once the fetcher syncs trades, they'll show up here.</td></tr>
+      <tr><td colspan="11">No closed trades yet — once the fetcher syncs trades, they'll show up here.</td></tr>
       {% endfor %}
     </tbody>
   </table>

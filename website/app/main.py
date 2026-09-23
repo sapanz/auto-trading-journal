@@ -11,12 +11,13 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from . import models, schemas
-from .database import Base, engine, get_db
+from .database import Base, engine, get_db, run_migrations
 from .fy import fy_bounds, fy_options
 from .insights import generate_weekly_insight
-from .matching import ingest_trades
+from .matching import ingest_trades, recompute_fifo
 
 Base.metadata.create_all(bind=engine)
+run_migrations()
 
 APP_DIR = Path(__file__).resolve().parent
 
@@ -64,10 +65,25 @@ def api_reset_all_data(db: Session = Depends(get_db), _=Depends(check_api_key)):
     return JSONResponse({"status": "reset"})
 
 
+@app.post("/api/positions/recompute")
+def api_recompute_positions(db: Session = Depends(get_db), _=Depends(check_api_key)):
+    """Rebuild every position from its existing raw trade legs, without
+    re-importing anything. Needed after a matching/charges logic change
+    (e.g. this deploy's charges.py) since positions for symbols/products
+    with no *new* trades otherwise never get touched again."""
+    pairs = db.query(models.Trade.tradingsymbol, models.Trade.product).distinct().all()
+    for tradingsymbol, product in pairs:
+        recompute_fifo(db, tradingsymbol, product)
+    db.commit()
+    return JSONResponse({"status": "recomputed", "symbol_product_pairs": len(pairs)})
+
+
 @app.get("/")
 def dashboard(request: Request, db: Session = Depends(get_db)):
     closed_q = db.query(models.Position).filter(models.Position.state == "closed")
-    total_pnl = closed_q.with_entities(func.coalesce(func.sum(models.Position.pnl), 0.0)).scalar()
+    total_pnl = closed_q.with_entities(func.coalesce(func.sum(models.Position.net_pnl), 0.0)).scalar()
+    total_gross_pnl = closed_q.with_entities(func.coalesce(func.sum(models.Position.pnl), 0.0)).scalar()
+    total_charges = closed_q.with_entities(func.coalesce(func.sum(models.Position.charges), 0.0)).scalar()
     total_trades = closed_q.count()
     wins = closed_q.filter(models.Position.is_win == 1).count()
     win_rate = (wins / total_trades * 100.0) if total_trades else 0.0
@@ -83,7 +99,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
 
     since = date.today() - timedelta(days=30)
     daily_rows = (
-        db.query(models.Position.exit_date, func.sum(models.Position.pnl))
+        db.query(models.Position.exit_date, func.sum(models.Position.net_pnl))
         .filter(models.Position.state == "closed", models.Position.exit_date >= since)
         .group_by(models.Position.exit_date)
         .order_by(models.Position.exit_date)
@@ -97,6 +113,8 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         "dashboard.html",
         {
             "total_pnl": total_pnl,
+            "total_gross_pnl": total_gross_pnl,
+            "total_charges": total_charges,
             "total_trades": total_trades,
             "win_rate": win_rate,
             "open_count": open_count,
