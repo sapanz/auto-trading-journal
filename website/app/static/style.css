@@ -137,3 +137,7 @@ nav a:hover { color: var(--accent); }
 .insight-list { list-style: none; padding: 0; margin-top: 16px; }
 .insight-list li { padding: 8px 0; border-bottom: 1px solid var(--border); }
 .insight-list a { color: var(--accent); text-decoration: none; }
+
+.two-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; margin-bottom: 24px; }
+.two-col .panel { margin-bottom: 0; }
+.muted-note { color: var(--muted); font-size: 13px; margin: 12px 0 0; }

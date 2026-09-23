@@ -11,7 +11,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from . import models, schemas
+from . import analytics, models, schemas
 from .database import Base, engine, get_db, run_migrations
 from .fy import fy_bounds, fy_label_for_date, fy_options
 from .insights import generate_weekly_insight
@@ -149,6 +149,73 @@ def dashboard(request: Request, db: Session = Depends(get_db), fy: str | None = 
             "cumulative_values": cumulative_values,
             "monthly_labels": monthly_labels,
             "monthly_values": monthly_values,
+        },
+    )
+
+
+@app.get("/analytics")
+def analytics_page(request: Request, db: Session = Depends(get_db), fy: str | None = None):
+    closed_q = db.query(models.Position).filter(models.Position.state == "closed")
+    bounds = closed_q.with_entities(func.min(models.Position.exit_date), func.max(models.Position.exit_date)).one()
+    available_fys = fy_options(bounds[0], bounds[1])
+    current_fy_label = fy_label_for_date(date.today())
+    selected_fy = fy if fy in available_fys else (available_fys[0] if available_fys else current_fy_label)
+    fy_start, fy_end = fy_bounds(selected_fy)
+
+    positions = (
+        db.query(models.Position)
+        .filter(
+            models.Position.state == "closed",
+            models.Position.exit_date >= fy_start,
+            models.Position.exit_date <= fy_end,
+        )
+        .order_by(models.Position.exit_time.asc())
+        .all()
+    )
+    daily_rows = (
+        db.query(models.Position.exit_date, func.sum(models.Position.net_pnl))
+        .filter(
+            models.Position.state == "closed",
+            models.Position.exit_date >= fy_start,
+            models.Position.exit_date <= fy_end,
+        )
+        .group_by(models.Position.exit_date)
+        .order_by(models.Position.exit_date)
+        .all()
+    )
+
+    cumulative, drawdown = analytics.build_equity_curve(daily_rows)
+    weekday_labels, weekday_values, weekday_counts = analytics.weekday_breakdown(positions)
+    hour_labels, hour_values = analytics.hour_breakdown(positions)
+    hist_labels, hist_counts = analytics.pnl_histogram(positions)
+
+    is_current_fy = selected_fy == current_fy_label
+    forecast = analytics.project_forward(daily_rows, cumulative, fy_end) if is_current_fy else None
+
+    return templates.TemplateResponse(
+        request,
+        "analytics.html",
+        {
+            "fy": selected_fy,
+            "available_fys": available_fys,
+            "current_fy_label": current_fy_label,
+            "is_current_fy": is_current_fy,
+            "stats": analytics.trade_stats(positions),
+            "streaks": analytics.streaks(positions),
+            "equity_labels": [d.isoformat() for d, _ in daily_rows],
+            "cumulative": cumulative,
+            "drawdown": drawdown,
+            "max_drawdown": min(drawdown) if drawdown else 0.0,
+            "weekday_labels": weekday_labels,
+            "weekday_values": weekday_values,
+            "weekday_counts": weekday_counts,
+            "hour_labels": hour_labels,
+            "hour_values": hour_values,
+            "symbol_rows": analytics.symbol_breakdown(positions),
+            "product_rows": analytics.product_breakdown(positions),
+            "hist_labels": hist_labels,
+            "hist_counts": hist_counts,
+            "forecast": forecast,
         },
     )
 
