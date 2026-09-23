@@ -107,11 +107,13 @@
   <h2>Benchmark — vs {{ benchmark_data.symbol if benchmark_data else 'Nifty 50' }}</h2>
   {% if benchmark_data %}
     <canvas id="benchmarkChart" height="80"></canvas>
-    {% if benchmark_data.your_series %}
-    <p class="muted-note">Both lines normalized to 100 at the start of this FY's trading. Your line uses <code>JOURNAL_CAPITAL_BASE</code> ({{ "%.0f"|format(benchmark_data.capital_base) }}) as the denominator for a % return — set that env var to your approximate deployed trading capital for an accurate comparison.</p>
-    {% else %}
-    <p class="muted-note">Showing {{ benchmark_data.symbol }}'s trend over your trading period for reference. To overlay your own % return on the same scale, set the <code>JOURNAL_CAPITAL_BASE</code> environment variable to your approximate trading capital.</p>
-    {% endif %}
+    <p class="muted-note">
+      Both lines normalized to 100 at the start of this FY's trading. "You" is your return on capital actually
+      deployed in trades — each day's net P&amp;L ÷ that day's capital committed, compounded day over day — not
+      your whole account's return, since this app doesn't track idle cash or deposits/withdrawals. If you keep
+      money on the sidelines rather than fully deployed, your real account return will be lower than this line;
+      it answers "how good are my trades," not "how good is my whole portfolio."
+    </p>
   {% else %}
     <p class="muted-note">Benchmark data isn't available right now (no cached data yet and the live fetch didn't succeed, or there are no trades yet this FY to anchor the comparison to). This uses an unofficial free data source and may be temporarily unavailable — it'll retry on your next visit.</p>
   {% endif %}

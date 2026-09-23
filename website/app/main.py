@@ -172,8 +172,8 @@ def analytics_page(request: Request, db: Session = Depends(get_db), fy: str | No
         .order_by(models.Position.exit_time.asc())
         .all()
     )
-    daily_rows = (
-        db.query(models.Position.exit_date, func.sum(models.Position.net_pnl))
+    daily_capital_rows = (
+        db.query(models.Position.exit_date, func.sum(models.Position.net_pnl), func.sum(models.Position.entry_value))
         .filter(
             models.Position.state == "closed",
             models.Position.exit_date >= fy_start,
@@ -183,6 +183,7 @@ def analytics_page(request: Request, db: Session = Depends(get_db), fy: str | No
         .order_by(models.Position.exit_date)
         .all()
     )
+    daily_rows = [(d, pnl) for d, pnl, _ in daily_capital_rows]
 
     cumulative, drawdown = analytics.build_equity_curve(daily_rows)
     weekday_labels, weekday_values, weekday_counts = analytics.weekday_breakdown(positions)
@@ -196,8 +197,6 @@ def analytics_page(request: Request, db: Session = Depends(get_db), fy: str | No
     benchmark_data = None
     if daily_rows:
         benchmark_symbol = os.environ.get("JOURNAL_BENCHMARK_SYMBOL", "NIFTY50")
-        capital_base_raw = os.environ.get("JOURNAL_CAPITAL_BASE")
-        capital_base = float(capital_base_raw) if capital_base_raw else None
         bench_start, bench_end = daily_rows[0][0], min(fy_end, date.today())
         try:
             cache_ok = benchmark.ensure_cached(db, benchmark_symbol, bench_start, bench_end)
@@ -210,8 +209,7 @@ def analytics_page(request: Request, db: Session = Depends(get_db), fy: str | No
                 "symbol": benchmark_symbol,
                 "labels": bench_labels,
                 "values": bench_values,
-                "your_series": benchmark.your_normalized_series(daily_rows, capital_base),
-                "capital_base": capital_base,
+                "your_series": benchmark.your_capital_weighted_series(daily_capital_rows),
             }
 
     return templates.TemplateResponse(

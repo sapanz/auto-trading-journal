@@ -109,16 +109,25 @@ def normalize_to_100(prices: list[tuple[dt.date, float]]):
     return labels, values
 
 
-def your_normalized_series(daily_rows, capital_base: float | None):
-    """None if no capital base is configured -- a % return needs a
-    denominator, and this app doesn't otherwise track account capital."""
-    if not capital_base or capital_base <= 0:
-        return None
+def your_capital_weighted_series(daily_capital_rows):
+    """Index (start=100) of return on capital actually deployed in trades,
+    chain-linked day over day: each day's return is that day's net P&L
+    divided by that day's capital committed (sum of entry_value across
+    positions closed that day), compounded across days like a fund's NAV.
+    This sidesteps needing to track total account capital or deposits/
+    withdrawals -- which this app has no record of -- since it's derived
+    entirely from trade data already in the journal.
+    Caveat: it measures the efficiency of capital you actually put into
+    trades, not your whole account's return. If you keep money on the
+    sidelines rather than fully deployed, your real account return will be
+    lower than this line -- it answers "how good are my trades", not "how
+    good is my whole portfolio"."""
     labels = []
     values = []
-    running = 0.0
-    for d, pnl in daily_rows:
-        running += pnl
+    index = 100.0
+    for d, pnl, capital in daily_capital_rows:
+        if capital:
+            index *= (1 + pnl / capital)
         labels.append(d.isoformat())
-        values.append(round(100 + running / capital_base * 100, 2))
+        values.append(round(index, 2))
     return {"labels": labels, "values": values}
