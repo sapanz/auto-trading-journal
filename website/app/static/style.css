@@ -158,6 +158,49 @@ nav a:hover { color: var(--accent); }
 .two-col .panel { margin-bottom: 0; }
 .muted-note { color: var(--muted); font-size: 13px; margin: 12px 0 0; }
 
+.symbol-filter-form { display: flex; gap: 8px; }
+.symbol-filter {
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 10px; font-size: 14px; font-family: inherit; min-width: 200px;
+}
+.symbol-filter-form button {
+  background: var(--panel-bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+}
+
+.fills-details { margin-top: 4px; }
+.fills-details summary { cursor: pointer; }
+.fills-details summary::-webkit-details-marker { display: none; }
+.fills-table { margin-top: 6px; font-size: 12px; }
+.fills-table th, .fills-table td { padding: 4px 8px; white-space: nowrap; }
+
+.login-container {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg);
+}
+.login-form {
+  background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px;
+  padding: 32px; width: 100%; max-width: 320px; display: flex; flex-direction: column;
+  gap: 12px; text-align: center;
+}
+.login-form h1 { margin: 0 0 4px; font-size: 20px; }
+.login-form input[name="pin"] {
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px; font-size: 20px; text-align: center; letter-spacing: 4px;
+  font-family: inherit;
+}
+.login-form button {
+  background: var(--accent); color: white; border: none;
+  padding: 10px 16px; border-radius: 8px; cursor: pointer; font-size: 14px;
+}
+.login-error { color: var(--negative); font-size: 13px; margin: 0; }
+
+.logout-form { display: inline; margin-left: auto; }
+.logout-form button {
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  font-size: 14px; font-family: inherit; padding: 0;
+}
+.logout-form button:hover { color: var(--accent); }
+
 .heatmap-container { overflow-x: auto; padding-bottom: 4px; }
 .heatmap-months {
   display: grid; grid-auto-flow: column; grid-auto-columns: 14px;

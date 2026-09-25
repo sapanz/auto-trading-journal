@@ -19,6 +19,11 @@
         <a href="/trades">Raw Trades</a>
         <a href="/insights">Insights</a>
       </nav>
+      {% if request.session.get('authenticated') %}
+      <form method="post" action="/logout" class="logout-form">
+        <button type="submit">Log out</button>
+      </form>
+      {% endif %}
     </div>
   </header>
   <main class="container">

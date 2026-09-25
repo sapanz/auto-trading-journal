@@ -10,12 +10,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from starlette.middleware.sessions import SessionMiddleware
 
 from . import analytics, benchmark, models, schemas, tax_report
 from .database import Base, engine, get_db, run_migrations
 from .fy import fy_bounds, fy_label_for_date, fy_options
 from .insights import generate_weekly_insight
-from .matching import ingest_trades, recompute_fifo
+from .matching import group_by_order, ingest_trades, recompute_fifo
 
 Base.metadata.create_all(bind=engine)
 run_migrations()
@@ -25,6 +26,73 @@ APP_DIR = Path(__file__).resolve().parent
 app = FastAPI(title="Trading Journal")
 app.mount("/static", StaticFiles(directory=str(APP_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(APP_DIR / "templates"))
+
+# Paths a visitor must reach without having entered the PIN: the login
+# page itself, static assets, and the machine-to-machine API endpoints
+# that already have their own JOURNAL_API_KEY auth (the fetcher cron has
+# no browser session and shouldn't need one).
+_PUBLIC_API_ROUTES = {
+    ("POST", "/api/trades"),
+    ("DELETE", "/api/trades"),
+    ("POST", "/api/positions/recompute"),
+    ("GET", "/api/ping"),
+}
+
+
+@app.middleware("http")
+async def require_pin_auth(request: Request, call_next):
+    path = request.url.path
+    if (
+        path.startswith("/static/")
+        or path == "/login"
+        or (request.method, path) in _PUBLIC_API_ROUTES
+    ):
+        return await call_next(request)
+    if not request.session.get("authenticated"):
+        return RedirectResponse(url=f"/login?next={path}", status_code=303)
+    return await call_next(request)
+
+
+# Registered AFTER require_pin_auth: Starlette's add_middleware() (which
+# @app.middleware("http") also goes through) inserts each new middleware
+# at the front of the stack, so whichever is added LAST ends up outermost
+# and runs FIRST on a request. SessionMiddleware needs to run before
+# require_pin_auth so request.session exists by the time it's checked --
+# reversing this order breaks with "SessionMiddleware must be installed".
+#
+# Signs the session cookie -- reuses JOURNAL_API_KEY if no dedicated
+# secret is set (both are already-required secrets in production; a
+# fixed fallback is only ever hit in unconfigured local dev).
+_SESSION_SECRET = (
+    os.environ.get("JOURNAL_SESSION_SECRET")
+    or os.environ.get("JOURNAL_API_KEY")
+    or "insecure-local-dev-only-session-secret"
+)
+app.add_middleware(SessionMiddleware, secret_key=_SESSION_SECRET, max_age=60 * 60 * 24 * 30)
+
+
+@app.get("/login")
+def login_page(request: Request, next: str = "/"):
+    return templates.TemplateResponse(request, "login.html", {"next": next, "error": None})
+
+
+@app.post("/login")
+def login_submit(request: Request, pin: str = Form(...), next: str = Form("/")):
+    expected_pin = os.environ.get("JOURNAL_ACCESS_PIN", "")
+    if not expected_pin:
+        raise HTTPException(500, "JOURNAL_ACCESS_PIN is not configured on the server")
+    if not hmac.compare_digest(pin.strip(), expected_pin):
+        return templates.TemplateResponse(
+            request, "login.html", {"next": next, "error": "Incorrect PIN"}, status_code=401
+        )
+    request.session["authenticated"] = True
+    return RedirectResponse(url=next or "/", status_code=303)
+
+
+@app.post("/logout")
+def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/login", status_code=303)
 
 
 def check_api_key(x_api_key: str = Header(default="")):
@@ -319,9 +387,12 @@ def positions_list(
 
 
 @app.get("/trades")
-def raw_trades(request: Request, db: Session = Depends(get_db)):
-    trades = db.query(models.Trade).order_by(models.Trade.exchange_timestamp.desc()).limit(200).all()
-    return templates.TemplateResponse(request, "trades.html", {"trades": trades})
+def raw_trades(request: Request, db: Session = Depends(get_db), symbol: str = ""):
+    query = db.query(models.Trade).order_by(models.Trade.exchange_timestamp.desc()).limit(1000)
+    if symbol:
+        query = query.filter(models.Trade.tradingsymbol.ilike(f"%{symbol.strip()}%"))
+    orders = group_by_order(query.all(), descending=True)[:200]
+    return templates.TemplateResponse(request, "trades.html", {"orders": orders, "symbol": symbol})
 
 
 @app.get("/positions/{position_id}")

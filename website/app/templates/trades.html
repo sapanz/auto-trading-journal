@@ -1,22 +1,55 @@
 {% extends "base.html" %}
-{% block title %}Raw Trades · Trading Journal{% endblock %}
+{% block title %}Trades · Trading Journal{% endblock %}
 {% block content %}
 <section class="panel">
+  <div class="filters">
+    <h1 style="margin: 0;">Trades (by order)</h1>
+    <form method="get" action="/trades" class="fy-form symbol-filter-form">
+      <input type="text" name="symbol" value="{{ symbol }}" placeholder="Filter by symbol..." class="symbol-filter">
+      <button type="submit">Filter</button>
+    </form>
+  </div>
+  <p class="muted-note">
+    One row per order — Zerodha's tradebook lists every partial fill of a limit/market order separately,
+    which used to mean a single order showed up as several rows here (and could fragment into several tiny
+    positions on the Trades page). Orders that filled in more than one piece show a fills badge; click it to
+    see the individual fills and their exact prices.
+  </p>
   <table class="data-table">
     <thead>
-      <tr><th>Time</th><th>Symbol</th><th>Exchange</th><th>Product</th><th>Side</th><th>Qty</th><th>Price</th><th>Order ID</th></tr>
+      <tr><th>Time</th><th>Symbol</th><th>Exchange</th><th>Product</th><th>Side</th><th>Qty</th><th>Avg Price</th><th>Order ID</th></tr>
     </thead>
     <tbody>
-      {% for t in trades %}
+      {% for o in orders %}
       <tr>
-        <td>{{ t.exchange_timestamp }}</td>
-        <td>{{ t.tradingsymbol }}</td>
-        <td>{{ t.exchange }}</td>
-        <td>{{ t.product }}</td>
-        <td class="{{ 'positive' if t.transaction_type == 'BUY' else 'negative' }}">{{ t.transaction_type }}</td>
-        <td>{{ t.quantity }}</td>
-        <td>{{ "%.2f"|format(t.price) }}</td>
-        <td>{{ t.order_id }}</td>
+        <td>{{ o.exchange_timestamp }}</td>
+        <td>{{ o.tradingsymbol }}</td>
+        <td>{{ o.exchange }}</td>
+        <td>{{ o.product }}</td>
+        <td class="{{ 'positive' if o.transaction_type == 'BUY' else 'negative' }}">{{ o.transaction_type }}</td>
+        <td>{{ o.quantity }}</td>
+        <td>
+          {{ "%.2f"|format(o.price) }}
+          {% if o.fill_count > 1 %}
+          <details class="fills-details">
+            <summary class="tag tag-custom">{{ o.fill_count }} fills</summary>
+            <table class="data-table fills-table">
+              <thead><tr><th>Time</th><th>Qty</th><th>Price</th><th>Trade ID</th></tr></thead>
+              <tbody>
+                {% for leg in o.legs|sort(attribute='exchange_timestamp') %}
+                <tr>
+                  <td>{{ leg.exchange_timestamp }}</td>
+                  <td>{{ leg.quantity }}</td>
+                  <td>{{ "%.2f"|format(leg.price) }}</td>
+                  <td>{{ leg.trade_id }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </details>
+          {% endif %}
+        </td>
+        <td>{{ o.order_id }}</td>
       </tr>
       {% else %}
       <tr><td colspan="8">No trades imported yet.</td></tr>
