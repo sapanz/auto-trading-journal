@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Log in · Trading Journal</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main class="login-container">
+    <form method="post" action="/login" class="login-form">
+      <h1>Trading Journal</h1>
+      <p class="stat-label">Enter your PIN to continue</p>
+      {% if error %}
+      <p class="login-error">{{ error }}</p>
+      {% endif %}
+      <input type="hidden" name="next" value="{{ next }}">
+      <input
+        type="password"
+        name="pin"
+        inputmode="numeric"
+        pattern="[0-9]*"
+        maxlength="12"
+        placeholder="PIN"
+        autofocus
+        autocomplete="current-password"
+      >
+      <button type="submit">Log in</button>
+    </form>
+  </main>
+</body>
+</html>

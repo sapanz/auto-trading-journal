@@ -268,13 +268,21 @@ Once deployed, put its public URL in `JOURNAL_URL` and the app's
 
 ## Notes
 
-- **No authentication yet.** The dashboard pages (`/`, `/positions`,
-  `/trades`, `/insights`, and the notes/rating form) are unauthenticated —
-  anyone who can reach the URL can view and edit your journal. Only the
-  `/api/trades` ingestion endpoint is protected (by `JOURNAL_API_KEY`).
-  Don't expose this publicly without adding auth first (a reverse-proxy
-  basic-auth in front of it is the fastest stopgap; a real login page is a
-  follow-up).
+- **PIN-protected.** Every page (`/`, `/analytics`, `/tax-report`,
+  `/positions`, `/trades`, `/insights`, and the notes/tags forms) requires
+  entering a PIN once per browser (a 30-day signed session cookie, via
+  Starlette's `SessionMiddleware`) — set the `JOURNAL_ACCESS_PIN`
+  environment variable (e.g. a 4+ digit PIN) to enable it; without it set,
+  `/login` returns a 500 rather than silently leaving the site open. The
+  machine-to-machine endpoints the fetcher cron uses
+  (`POST`/`DELETE /api/trades`, `POST /api/positions/recompute`,
+  `GET /api/ping`) are unaffected — they keep using `JOURNAL_API_KEY`
+  instead, since the cron has no browser session. Optionally set
+  `JOURNAL_SESSION_SECRET` to a separate random string for signing the
+  session cookie; it falls back to reusing `JOURNAL_API_KEY` if unset.
+  A short numeric PIN is convenient, not hardened — it has no login-attempt
+  rate limiting, so treat it as "keeps casual visitors out" rather than
+  a defense against a determined, scripted attacker.
 - Weekly insight generation is currently manual (the "Generate insight
   now" button on `/insights`). If you want it automatic, either add it to
   the same GitHub Actions cron (a `curl -X POST $JOURNAL_URL/insights/generate`
@@ -284,3 +292,14 @@ Once deployed, put its public URL in `JOURNAL_URL` and the app's
   same algorithm in the Odoo module (`odoo_addon/trading_journal`), so
   moving to Odoo later — or running both side by side — doesn't require
   re-deriving the P&L logic.
+- **Orders are clubbed by order_id.** Zerodha's tradebook records each
+  partial fill of a limit/market order as its own row with its own
+  `trade_id` — a single order can genuinely execute in several pieces at
+  slightly different prices. `matching.group_by_order()` collapses same-
+  order fills into one logical trade (summed quantity, quantity-weighted
+  average price) before both FIFO position matching and the `/trades`
+  display, so one order doesn't fragment into several tiny positions or
+  clutter the raw trades list. Genuinely separate orders (different
+  `order_id`, even same symbol/day) are always kept separate. The
+  individual fills aren't lost — expand the "N fills" badge on `/trades`
+  to see them.

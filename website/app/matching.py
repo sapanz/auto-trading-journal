@@ -55,15 +55,55 @@ def ingest_trades(db: Session, trades_data: list[dict]) -> dict:
     return {"received": len(trades_data), "imported": imported, "skipped": len(trades_data) - imported}
 
 
+def group_by_order(trades: list, descending: bool = False) -> list[dict]:
+    """Group raw trade legs by order_id, aggregating quantity (sum) and
+    price (quantity-weighted average) into one row per order.
+
+    Zerodha's tradebook records each partial fill of a limit/market order
+    as its own row with its own trade_id -- a single order can genuinely
+    fill in several pieces at slightly different prices. That's accurate
+    at the fill level but clutters both the raw Trades page and FIFO
+    position matching (one order fragmenting into several tiny
+    positions), when what actually matters for the journal is "what did
+    this order do overall". Order within the input list doesn't matter;
+    the result is always explicitly sorted by (aggregated) timestamp."""
+    groups: dict[str, list] = {}
+    for t in trades:
+        groups.setdefault(t.order_id, []).append(t)
+
+    rows = []
+    for order_id, legs in groups.items():
+        total_qty = sum(l.quantity for l in legs)
+        weighted_price = sum(l.quantity * l.price for l in legs) / total_qty
+        rows.append({
+            "order_id": order_id,
+            "tradingsymbol": legs[0].tradingsymbol,
+            "exchange": legs[0].exchange,
+            "product": legs[0].product,
+            "transaction_type": legs[0].transaction_type,
+            "quantity": total_qty,
+            "price": weighted_price,
+            "exchange_timestamp": max(l.exchange_timestamp for l in legs),
+            "trade_date": legs[0].trade_date,
+            "fill_count": len(legs),
+            "legs": legs,
+        })
+    rows.sort(key=lambda r: r["exchange_timestamp"], reverse=descending)
+    return rows
+
+
 def recompute_fifo(db: Session, tradingsymbol: str, product: str):
     """Rebuild every position for this symbol/product from its raw trade
-    legs using FIFO matching (handles both long and short round trips)."""
-    legs = (
+    legs using FIFO matching (handles both long and short round trips).
+    Partial fills of the same order are clubbed into one logical fill
+    first (see group_by_order) so one limit order that filled in several
+    pieces doesn't fragment into several tiny positions."""
+    raw_legs = (
         db.query(models.Trade)
         .filter(models.Trade.tradingsymbol == tradingsymbol, models.Trade.product == product)
-        .order_by(models.Trade.exchange_timestamp.asc(), models.Trade.id.asc())
         .all()
     )
+    legs = group_by_order(raw_legs)
 
     stale = (
         db.query(models.Position)
@@ -79,8 +119,8 @@ def recompute_fifo(db: Session, tradingsymbol: str, product: str):
     new_positions = []
 
     for leg in legs:
-        remaining = leg.quantity
-        if leg.transaction_type == "BUY":
+        remaining = leg["quantity"]
+        if leg["transaction_type"] == "BUY":
             opposite_queue, same_queue, closes_direction = sell_queue, buy_queue, "SHORT"
         else:
             opposite_queue, same_queue, closes_direction = buy_queue, sell_queue, "LONG"
@@ -89,10 +129,10 @@ def recompute_fifo(db: Session, tradingsymbol: str, product: str):
             chunk = opposite_queue[0]
             matched_qty = min(remaining, chunk["qty"])
             entry_value = matched_qty * chunk["price"]
-            exit_value = matched_qty * leg.price
+            exit_value = matched_qty * leg["price"]
             pnl = (exit_value - entry_value) if closes_direction == "LONG" else (entry_value - exit_value)
             pnl_percent = (pnl / entry_value * 100.0) if entry_value else 0.0
-            holding_minutes = (leg.exchange_timestamp - chunk["time"]).total_seconds() / 60.0
+            holding_minutes = (leg["exchange_timestamp"] - chunk["time"]).total_seconds() / 60.0
 
             charge_breakdown = estimate_charges(product, closes_direction, entry_value, exit_value)
             total_charges = charge_breakdown["total"]
@@ -106,13 +146,13 @@ def recompute_fifo(db: Session, tradingsymbol: str, product: str):
                 state="closed",
                 quantity=matched_qty,
                 entry_time=chunk["time"],
-                exit_time=leg.exchange_timestamp,
+                exit_time=leg["exchange_timestamp"],
                 entry_date=chunk["date"],
-                exit_date=leg.trade_date,
+                exit_date=leg["trade_date"],
                 entry_value=entry_value,
                 exit_value=exit_value,
                 entry_price=chunk["price"],
-                exit_price=leg.price,
+                exit_price=leg["price"],
                 pnl=pnl,
                 pnl_percent=pnl_percent,
                 charges=total_charges,
@@ -121,8 +161,8 @@ def recompute_fifo(db: Session, tradingsymbol: str, product: str):
                 is_win=1 if net_pnl > 0 else 0,
                 holding_minutes=holding_minutes,
             )
-            pos.entry_trades.append(chunk["trade"])
-            pos.exit_trades.append(leg)
+            pos.entry_trades.extend(chunk["trades"])
+            pos.exit_trades.extend(leg["legs"])
             db.add(pos)
             new_positions.append(pos)
 
@@ -133,8 +173,8 @@ def recompute_fifo(db: Session, tradingsymbol: str, product: str):
 
         if remaining > QTY_EPSILON:
             same_queue.append({
-                "qty": remaining, "price": leg.price, "trade": leg,
-                "time": leg.exchange_timestamp, "date": leg.trade_date,
+                "qty": remaining, "price": leg["price"], "trades": leg["legs"],
+                "time": leg["exchange_timestamp"], "date": leg["trade_date"],
             })
 
     for chunk in buy_queue:
@@ -143,7 +183,7 @@ def recompute_fifo(db: Session, tradingsymbol: str, product: str):
             quantity=chunk["qty"], entry_time=chunk["time"], entry_date=chunk["date"],
             entry_value=chunk["qty"] * chunk["price"], entry_price=chunk["price"],
         )
-        pos.entry_trades.append(chunk["trade"])
+        pos.entry_trades.extend(chunk["trades"])
         db.add(pos)
         new_positions.append(pos)
 
@@ -153,7 +193,7 @@ def recompute_fifo(db: Session, tradingsymbol: str, product: str):
             quantity=chunk["qty"], entry_time=chunk["time"], entry_date=chunk["date"],
             entry_value=chunk["qty"] * chunk["price"], entry_price=chunk["price"],
         )
-        pos.entry_trades.append(chunk["trade"])
+        pos.entry_trades.extend(chunk["trades"])
         db.add(pos)
         new_positions.append(pos)
 
