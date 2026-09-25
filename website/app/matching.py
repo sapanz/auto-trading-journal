@@ -56,27 +56,35 @@ def ingest_trades(db: Session, trades_data: list[dict]) -> dict:
 
 
 def group_by_order(trades: list, descending: bool = False) -> list[dict]:
-    """Group raw trade legs by order_id, aggregating quantity (sum) and
-    price (quantity-weighted average) into one row per order.
+    """Group raw trade legs by (trade_date, tradingsymbol, product,
+    transaction_type), aggregating quantity (sum) and price (quantity-
+    weighted average) into one row per symbol per side per day.
 
-    Zerodha's tradebook records each partial fill of a limit/market order
-    as its own row with its own trade_id -- a single order can genuinely
-    fill in several pieces at slightly different prices. That's accurate
-    at the fill level but clutters both the raw Trades page and FIFO
-    position matching (one order fragmenting into several tiny
-    positions), when what actually matters for the journal is "what did
-    this order do overall". Order within the input list doesn't matter;
-    the result is always explicitly sorted by (aggregated) timestamp."""
-    groups: dict[str, list] = {}
+    Zerodha's tradebook records each fill separately -- a limit order can
+    fill in several pieces, and placing several orders for the same
+    symbol through the day (adding to a position, modifying an order,
+    etc.) produces several distinct order_ids too. Both fragment the raw
+    Trades page and FIFO position matching into many small rows/positions
+    for what a trader thinks of as one day's activity in that symbol
+    ("I bought RELIANCE today at an average of X"). Grouping by order_id
+    alone only clubs partial fills of a single order and misses the
+    multi-order case, so the grouping key is the whole day instead.
+    A BUY and a SELL on the same day stay separate rows (they're not the
+    same trade), and different days/products/symbols are never merged.
+    Order within the input list doesn't matter; the result is always
+    explicitly sorted by (aggregated) timestamp."""
+    groups: dict[tuple, list] = {}
     for t in trades:
-        groups.setdefault(t.order_id, []).append(t)
+        key = (t.trade_date, t.tradingsymbol, t.product, t.transaction_type)
+        groups.setdefault(key, []).append(t)
 
     rows = []
-    for order_id, legs in groups.items():
+    for legs in groups.values():
         total_qty = sum(l.quantity for l in legs)
         weighted_price = sum(l.quantity * l.price for l in legs) / total_qty
+        order_ids = sorted({l.order_id for l in legs})
         rows.append({
-            "order_id": order_id,
+            "order_id": order_ids[0] if len(order_ids) == 1 else f"{len(order_ids)} orders",
             "tradingsymbol": legs[0].tradingsymbol,
             "exchange": legs[0].exchange,
             "product": legs[0].product,

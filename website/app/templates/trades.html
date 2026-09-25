@@ -3,21 +3,22 @@
 {% block content %}
 <section class="panel">
   <div class="filters">
-    <h1 style="margin: 0;">Trades (by order)</h1>
+    <h1 style="margin: 0;">Trades (by symbol/day)</h1>
     <form method="get" action="/trades" class="fy-form symbol-filter-form">
       <input type="text" name="symbol" value="{{ symbol }}" placeholder="Filter by symbol..." class="symbol-filter">
       <button type="submit">Filter</button>
     </form>
   </div>
   <p class="muted-note">
-    One row per order — Zerodha's tradebook lists every partial fill of a limit/market order separately,
-    which used to mean a single order showed up as several rows here (and could fragment into several tiny
-    positions on the Trades page). Orders that filled in more than one piece show a fills badge; click it to
-    see the individual fills and their exact prices.
+    One row per symbol, per side (buy/sell), per day — Zerodha's tradebook lists every individual fill and
+    every order separately, which used to mean a single day's trading in one symbol could show up as several
+    rows here (and fragment into several tiny positions). A buy and a sell on the same day stay separate rows.
+    Rows built from more than one fill show a fills badge; click it to see the individual fills, their orders,
+    and their exact prices.
   </p>
   <table class="data-table">
     <thead>
-      <tr><th>Time</th><th>Symbol</th><th>Exchange</th><th>Product</th><th>Side</th><th>Qty</th><th>Avg Price</th><th>Order ID</th></tr>
+      <tr><th>Time</th><th>Symbol</th><th>Exchange</th><th>Product</th><th>Side</th><th>Qty</th><th>Avg Price</th><th>Order(s)</th></tr>
     </thead>
     <tbody>
       {% for o in orders %}
@@ -34,13 +35,14 @@
           <details class="fills-details">
             <summary class="tag tag-custom">{{ o.fill_count }} fills</summary>
             <table class="data-table fills-table">
-              <thead><tr><th>Time</th><th>Qty</th><th>Price</th><th>Trade ID</th></tr></thead>
+              <thead><tr><th>Time</th><th>Qty</th><th>Price</th><th>Order ID</th><th>Trade ID</th></tr></thead>
               <tbody>
                 {% for leg in o.legs|sort(attribute='exchange_timestamp') %}
                 <tr>
                   <td>{{ leg.exchange_timestamp }}</td>
                   <td>{{ leg.quantity }}</td>
                   <td>{{ "%.2f"|format(leg.price) }}</td>
+                  <td>{{ leg.order_id }}</td>
                   <td>{{ leg.trade_id }}</td>
                 </tr>
                 {% endfor %}
