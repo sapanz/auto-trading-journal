@@ -11,6 +11,14 @@ if _database_url:
     # SQLAlchemy 2.0 requires "postgresql://".
     if _database_url.startswith("postgres://"):
         _database_url = _database_url.replace("postgres://", "postgresql://", 1)
+    # Explicitly pick the psycopg2 driver rather than leaving SQLAlchemy to
+    # pick a default for the bare "postgresql://" scheme -- only
+    # psycopg2-binary is in requirements.txt, but SQLAlchemy resolved the
+    # unqualified scheme to the psycopg (v3) dialect in production and
+    # failed with "No module named 'psycopg'" since that package was never
+    # installed. Pinning the driver removes the ambiguity outright.
+    if _database_url.startswith("postgresql://"):
+        _database_url = _database_url.replace("postgresql://", "postgresql+psycopg2://", 1)
     SQLALCHEMY_DATABASE_URL = _database_url
     engine = create_engine(SQLALCHEMY_DATABASE_URL, pool_pre_ping=True)
 else:
