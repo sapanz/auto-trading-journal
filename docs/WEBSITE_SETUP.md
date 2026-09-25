@@ -292,14 +292,16 @@ Once deployed, put its public URL in `JOURNAL_URL` and the app's
   same algorithm in the Odoo module (`odoo_addon/trading_journal`), so
   moving to Odoo later — or running both side by side — doesn't require
   re-deriving the P&L logic.
-- **Orders are clubbed by order_id.** Zerodha's tradebook records each
-  partial fill of a limit/market order as its own row with its own
-  `trade_id` — a single order can genuinely execute in several pieces at
-  slightly different prices. `matching.group_by_order()` collapses same-
-  order fills into one logical trade (summed quantity, quantity-weighted
-  average price) before both FIFO position matching and the `/trades`
-  display, so one order doesn't fragment into several tiny positions or
-  clutter the raw trades list. Genuinely separate orders (different
-  `order_id`, even same symbol/day) are always kept separate. The
-  individual fills aren't lost — expand the "N fills" badge on `/trades`
-  to see them.
+- **Trades are clubbed by symbol/side/day.** Zerodha's tradebook records
+  each individual fill and each order as its own row — a limit order can
+  fill in several pieces, and placing more than one order for the same
+  symbol through the day (adding to a position, a modified order, etc.)
+  produces several distinct `order_id`s too. `matching.group_by_order()`
+  collapses everything sharing the same (day, symbol, product, buy/sell)
+  into one logical trade (summed quantity, quantity-weighted average
+  price) before both FIFO position matching and the `/trades` display, so
+  a day's activity in a symbol doesn't fragment into several tiny
+  positions or clutter the raw trades list. A buy and a sell on the same
+  day stay separate rows, and different days/products/symbols are never
+  merged. The individual fills and their order IDs aren't lost — expand
+  the "N fills" badge on `/trades` to see them.
