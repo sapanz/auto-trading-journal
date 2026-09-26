@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Risk Management · Trading Journal{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Capital &amp; Risk Settings</h1>
+  <p class="muted-note">
+    Capital is stored here (not in code) so you can update it as your account changes, without a redeploy.
+    Risk % is the fraction of that capital you're willing to lose on a single trade — 1% is a common default.
+  </p>
+  {% if error %}
+  <p class="login-error">{{ error }}</p>
+  {% endif %}
+  <form method="post" action="/risk-management/settings" class="notes-form">
+    <label for="capital">Trading capital</label>
+    <input type="number" step="0.01" id="capital" name="capital" value="{{ capital }}">
+    <label for="risk_percent">Risk per trade (%)</label>
+    <input type="number" step="0.01" id="risk_percent" name="risk_percent" value="{{ risk_percent }}">
+    <button type="submit">Save</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Position Size Calculator</h2>
+  {% if capital_value <= 0 %}
+  <p class="muted-note">Set your trading capital above to see quantity and target calculations here.</p>
+  {% endif %}
+  <div class="detail-grid" style="margin-top: 0;">
+    <div>
+      <span class="stat-label">Entry Price</span>
+      <input type="number" step="0.01" id="entry" placeholder="e.g. 2500" class="calc-input">
+    </div>
+    <div>
+      <span class="stat-label">Stop-Loss Price</span>
+      <input type="number" step="0.01" id="sl" placeholder="e.g. 2480" class="calc-input">
+    </div>
+  </div>
+  <div id="calc-results"></div>
+</section>
+
+<script>
+  const CAPITAL = {{ capital_value|tojson }};
+  const RISK_PERCENT = {{ risk_percent_value|tojson }};
+  const R_MULTIPLES = [1, 2, 3, 4, 5];
+
+  function fmt(n) {
+    return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function statBlock(label, value, cls) {
+    return '<div><span class="stat-label">' + label + '</span><span class="' + (cls || '') + '">' + value + '</span></div>';
+  }
+
+  function recalc() {
+    const resultsEl = document.getElementById('calc-results');
+    const entry = parseFloat(document.getElementById('entry').value);
+    const sl = parseFloat(document.getElementById('sl').value);
+
+    if (isNaN(entry) || isNaN(sl)) {
+      resultsEl.innerHTML = '';
+      return;
+    }
+    if (entry === sl) {
+      resultsEl.innerHTML = '<p class="login-error">Entry and stop-loss can\'t be equal.</p>';
+      return;
+    }
+    if (CAPITAL <= 0) {
+      resultsEl.innerHTML = '<p class="muted-note">Set your trading capital above first.</p>';
+      return;
+    }
+
+    const direction = entry > sl ? 'LONG' : 'SHORT';
+    const riskPerShare = Math.abs(entry - sl);
+    const riskAmount = CAPITAL * (RISK_PERCENT / 100);
+    const qty = Math.floor(riskAmount / riskPerShare);
+    const actualRisk = qty * riskPerShare;
+    const positionValue = qty * entry;
+
+    let html = '<div class="detail-grid">';
+    html += statBlock('Direction', direction, direction === 'LONG' ? 'positive' : 'negative');
+    html += statBlock('Quantity', qty);
+    html += statBlock('Risk Amount (' + RISK_PERCENT + '% of capital)', fmt(riskAmount));
+    html += statBlock('Actual Risk (qty × risk/share)', fmt(actualRisk));
+    html += statBlock('Position Value', fmt(positionValue));
+    html += '</div>';
+
+    if (qty <= 0) {
+      html += '<p class="login-error">Risk per share (' + fmt(riskPerShare) + ') is too large for your risk amount (' + fmt(riskAmount) + ') -- quantity rounds down to 0. Widen your capital/risk % or tighten the stop-loss.</p>';
+    } else if (positionValue > CAPITAL) {
+      html += '<p class="muted-note">Position value (' + fmt(positionValue) + ') exceeds your configured capital (' + fmt(CAPITAL) + ') -- this size needs leverage/margin.</p>';
+    }
+
+    html += '<table class="data-table"><thead><tr><th>Risk:Reward</th><th>Target Price</th><th>Potential Profit</th></tr></thead><tbody>';
+    R_MULTIPLES.forEach(function (r) {
+      const target = direction === 'LONG' ? entry + r * riskPerShare : entry - r * riskPerShare;
+      const profit = actualRisk * r;
+      html += '<tr><td>1:' + r + '</td><td>' + fmt(target) + '</td><td class="positive">' + fmt(profit) + '</td></tr>';
+    });
+    html += '</tbody></table>';
+
+    resultsEl.innerHTML = html;
+  }
+
+  document.getElementById('entry').addEventListener('input', recalc);
+  document.getElementById('sl').addEventListener('input', recalc);
+</script>
+{% endblock %}

@@ -305,3 +305,14 @@ Once deployed, put its public URL in `JOURNAL_URL` and the app's
   day stay separate rows, and different days/products/symbols are never
   merged. The individual fills and their order IDs aren't lost — expand
   the "N fills" badge on `/trades` to see them.
+- **Risk Management page (`/risk-management`).** A position-size
+  calculator: set your trading capital and risk-per-trade % once (stored
+  in a `settings` DB table, editable from the page itself — not an env
+  var, since capital changes over time and shouldn't need a redeploy to
+  update), then enter an entry and stop-loss price to get quantity
+  (`risk_amount / |entry - stop_loss|`, risk_amount = capital × risk%),
+  direction (auto-detected from which side the stop is on), and target
+  prices/profit at 1:1 through 1:5 risk:reward. The calculator itself runs
+  client-side in plain JS for instant feedback; only the capital/risk%
+  settings round-trip to the server. Protected by the same PIN as every
+  other page.

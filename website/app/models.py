@@ -104,6 +104,17 @@ class Position(Base):
     exit_trades = relationship("Trade", secondary=position_exit_trades)
 
 
+class Setting(Base):
+    """Small key/value store for user-editable app settings that need to
+    persist and be changed from the UI without a redeploy (e.g. trading
+    capital, which changes over time) -- unlike JOURNAL_* env vars, which
+    are for host-level config set once at deploy time."""
+    __tablename__ = "settings"
+
+    key = Column(String, primary_key=True)
+    value = Column(String, nullable=False)
+
+
 class BenchmarkPrice(Base):
     """Cached daily closing price for an index (e.g. Nifty 50), fetched
     from an external source (see benchmark.py) so the Analytics page's
