@@ -12,7 +12,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import analytics, benchmark, models, schemas, tax_report
+from . import analytics, benchmark, models, schemas, settings, tax_report
 from .database import Base, engine, get_db, run_migrations
 from .fy import fy_bounds, fy_label_for_date, fy_options
 from .insights import generate_weekly_insight
@@ -473,3 +473,65 @@ def insight_detail(insight_id: int, request: Request, db: Session = Depends(get_
 def insights_generate(db: Session = Depends(get_db)):
     generate_weekly_insight(db)
     return RedirectResponse(url="/insights", status_code=303)
+
+
+RISK_CAPITAL_KEY = "risk_capital"
+RISK_PERCENT_KEY = "risk_percent"
+DEFAULT_RISK_PERCENT = "1.0"
+
+
+def _parse_float(value: str, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+@app.get("/risk-management")
+def risk_management_page(request: Request, db: Session = Depends(get_db)):
+    capital_str = settings.get_setting(db, RISK_CAPITAL_KEY, "0")
+    risk_percent_str = settings.get_setting(db, RISK_PERCENT_KEY, DEFAULT_RISK_PERCENT)
+    return templates.TemplateResponse(
+        request,
+        "risk_management.html",
+        {
+            "capital": capital_str,
+            "risk_percent": risk_percent_str,
+            "capital_value": _parse_float(capital_str, 0.0),
+            "risk_percent_value": _parse_float(risk_percent_str, 1.0),
+            "error": None,
+        },
+    )
+
+
+@app.post("/risk-management/settings")
+def update_risk_settings(
+    request: Request,
+    db: Session = Depends(get_db),
+    capital: str = Form(...),
+    risk_percent: str = Form(...),
+):
+    error = None
+    try:
+        float(capital)
+        float(risk_percent)
+    except ValueError:
+        error = "Capital and Risk % must both be numbers."
+
+    if error:
+        return templates.TemplateResponse(
+            request,
+            "risk_management.html",
+            {
+                "capital": capital,
+                "risk_percent": risk_percent,
+                "capital_value": _parse_float(capital, 0.0),
+                "risk_percent_value": _parse_float(risk_percent, 1.0),
+                "error": error,
+            },
+            status_code=400,
+        )
+
+    settings.set_setting(db, RISK_CAPITAL_KEY, capital)
+    settings.set_setting(db, RISK_PERCENT_KEY, risk_percent)
+    return RedirectResponse(url="/risk-management", status_code=303)
