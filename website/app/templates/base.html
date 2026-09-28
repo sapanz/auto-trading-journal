@@ -8,27 +8,26 @@
   {% block head %}{% endblock %}
 </head>
 <body>
-  <header class="topbar">
-    <div class="topbar-inner">
+  <div class="app-shell">
+    <aside class="sidebar">
       <a class="brand" href="/">Trading Journal</a>
-      <nav>
-        <a href="/">Dashboard</a>
-        <a href="/analytics">Analytics</a>
-        <a href="/tax-report">Tax Report</a>
-        <a href="/positions">Trades</a>
-        <a href="/trades">Raw Trades</a>
-        <a href="/insights">Insights</a>
-        <a href="/risk-management">Risk Management</a>
+      <nav class="sidebar-nav">
+        <a href="/" class="{{ 'active' if request.url.path == '/' else '' }}">Dashboard</a>
+        <a href="/risk-management" class="{{ 'active' if request.url.path.startswith('/risk-management') else '' }}">Risk Management</a>
+        <a href="/analytics" class="{{ 'active' if request.url.path.startswith('/analytics') else '' }}">Analytics</a>
+        <a href="/tax-report" class="{{ 'active' if request.url.path.startswith('/tax-report') else '' }}">Tax Report</a>
+        <a href="/positions" class="{{ 'active' if request.url.path.startswith('/positions') else '' }}">Trades</a>
+        <a href="/insights" class="{{ 'active' if request.url.path.startswith('/insights') else '' }}">Insights</a>
       </nav>
       {% if request.session.get('authenticated') %}
-      <form method="post" action="/logout" class="logout-form">
+      <form method="post" action="/logout" class="sidebar-logout">
         <button type="submit">Log out</button>
       </form>
       {% endif %}
-    </div>
-  </header>
-  <main class="container">
-    {% block content %}{% endblock %}
-  </main>
+    </aside>
+    <main class="container">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
 </body>
 </html>
