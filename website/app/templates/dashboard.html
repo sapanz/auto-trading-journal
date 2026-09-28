@@ -1,9 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Dashboard · Trading Journal{% endblock %}
-{% block head %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-{% endblock %}
 {% block content %}
+<section class="panel quote-slider">
+  <p class="quote-text" id="quote-text"></p>
+  <p class="quote-author" id="quote-author"></p>
+  <div class="quote-dots" id="quote-dots"></div>
+</section>
+
 <section class="stat-grid">
   <div class="stat-card">
     <span class="stat-label">Net P&amp;L (after charges)</span>
@@ -36,24 +39,8 @@
 </section>
 
 <section class="panel">
-  <div class="filters">
-    <h2 style="margin: 0;">Performance — FY {{ fy }}</h2>
-    <form method="get" action="/" class="fy-form">
-      <select name="fy" onchange="this.form.submit()">
-        {% for f in available_fys %}
-        <option value="{{ f }}" {{ 'selected' if fy == f else '' }}>FY {{ f }}</option>
-        {% endfor %}
-      </select>
-    </form>
-  </div>
-  <h3>Cumulative Net P&amp;L</h3>
-  <canvas id="cumulativeChart" height="80"></canvas>
-  <h3>Monthly Net P&amp;L</h3>
-  <canvas id="monthlyChart" height="90"></canvas>
-</section>
-
-<section class="panel">
   <h2>Recent Closed Trades</h2>
+  <p class="muted-note">Looking for charts and trends? Head to <a href="/analytics">Analytics</a> for the equity curve, drawdown, streaks, and more.</p>
   <table class="data-table">
     <thead>
       <tr>
@@ -84,44 +71,64 @@
 </section>
 
 <script>
-  const cumulativeValues = {{ cumulative_values|tojson }};
-  new Chart(document.getElementById('cumulativeChart'), {
-    type: 'line',
-    data: {
-      labels: {{ cumulative_labels|tojson }},
-      datasets: [{
-        label: 'Cumulative Net P&L',
-        data: cumulativeValues,
-        borderColor: '#2563eb',
-        backgroundColor: 'rgba(37, 99, 235, .12)',
-        fill: true,
-        tension: 0.15,
-        pointRadius: 0,
-      }],
-    },
-    options: {
-      responsive: true,
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true } },
-    },
+  const QUOTES = [
+    { text: "The elements of good trading are cutting losses, cutting losses, and cutting losses.", author: "Ed Seykota" },
+    { text: "It's not whether you're right or wrong, but how much money you make when you're right and how much you lose when you're wrong.", author: "George Soros" },
+    { text: "The goal of a successful trader is to make the best trades. Money is secondary.", author: "Alexander Elder" },
+    { text: "Markets are never wrong, opinions often are.", author: "Jesse Livermore" },
+    { text: "Risk comes from not knowing what you're doing.", author: "Warren Buffett" },
+    { text: "Amateurs think about how much money they can make. Professionals think about how much they could lose.", author: "Jack Schwager" },
+    { text: "The market can stay irrational longer than you can stay solvent.", author: "attr. John Maynard Keynes" },
+    { text: "Plan your trade and trade your plan.", author: "Trading proverb" },
+    { text: "Every trade is a lesson; every loss is tuition.", author: "" },
+    { text: "Discipline is the bridge between goals and accomplishment.", author: "Jim Rohn" },
+    { text: "Consistency is what transforms average into excellence.", author: "" },
+  ];
+
+  let quoteIndex = 0;
+  let quoteTimer = null;
+  const textEl = document.getElementById('quote-text');
+  const authorEl = document.getElementById('quote-author');
+  const dotsEl = document.getElementById('quote-dots');
+
+  function renderQuote(i) {
+    textEl.style.opacity = 0;
+    authorEl.style.opacity = 0;
+    setTimeout(function () {
+      textEl.textContent = '“' + QUOTES[i].text + '”';
+      authorEl.textContent = QUOTES[i].author ? '— ' + QUOTES[i].author : '';
+      textEl.style.opacity = 1;
+      authorEl.style.opacity = 1;
+    }, 200);
+    Array.from(dotsEl.children).forEach(function (dot, idx) {
+      dot.classList.toggle('active', idx === i);
+    });
+  }
+
+  function nextQuote() {
+    quoteIndex = (quoteIndex + 1) % QUOTES.length;
+    renderQuote(quoteIndex);
+  }
+
+  function resetTimer() {
+    if (quoteTimer) clearInterval(quoteTimer);
+    quoteTimer = setInterval(nextQuote, 6000);
+  }
+
+  QUOTES.forEach(function (_, i) {
+    const dot = document.createElement('button');
+    dot.type = 'button';
+    dot.className = 'dot';
+    dot.setAttribute('aria-label', 'Show quote ' + (i + 1));
+    dot.addEventListener('click', function () {
+      quoteIndex = i;
+      renderQuote(i);
+      resetTimer();
+    });
+    dotsEl.appendChild(dot);
   });
 
-  const monthlyValues = {{ monthly_values|tojson }};
-  new Chart(document.getElementById('monthlyChart'), {
-    type: 'bar',
-    data: {
-      labels: {{ monthly_labels|tojson }},
-      datasets: [{
-        label: 'Net P&L',
-        data: monthlyValues,
-        backgroundColor: monthlyValues.map((v) => (v >= 0 ? '#16a34a' : '#dc2626')),
-      }],
-    },
-    options: {
-      responsive: true,
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true } },
-    },
-  });
+  renderQuote(0);
+  resetTimer();
 </script>
 {% endblock %}
