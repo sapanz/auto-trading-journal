@@ -282,6 +282,34 @@ def calendar_heatmap(daily_rows, fy_start: dt.date, fy_end: dt.date):
     return grid, month_labels
 
 
+def compute_cagr(capital: float, total_pnl: float, first_trade_date, as_of_date: dt.date):
+    """Annualized return on your configured trading capital, compounded
+    since your first closed trade -- answers "how much am I earning on
+    capital" as a single yearly rate rather than a raw rupee total.
+    Treats `capital` as the starting balance and layers all-time net P&L
+    on top to get the ending balance; it does NOT account for any
+    deposits/withdrawals made along the way outside the app. Returns None
+    when there isn't enough data to annualize meaningfully (no capital
+    set, no closed trades yet, under ~30 days of history, or the capital
+    base has gone to zero/negative)."""
+    if capital <= 0 or first_trade_date is None:
+        return None
+    years = (as_of_date - first_trade_date).days / 365.25
+    if years < 30 / 365.25:
+        return None
+    ending_value = capital + total_pnl
+    if ending_value <= 0:
+        return None
+    cagr_pct = ((ending_value / capital) ** (1 / years) - 1) * 100.0
+    return {
+        "cagr_percent": round(cagr_pct, 2),
+        "years": round(years, 2),
+        "starting_capital": round(capital, 2),
+        "ending_value": round(ending_value, 2),
+        "total_pnl": round(total_pnl, 2),
+    }
+
+
 def project_forward(daily_rows, cumulative, fy_end: dt.date, window: int = 20):
     """Naive linear trend projection of cumulative net P&L: fit a line on
     the trailing `window` trading days and extrapolate it to fy_end by

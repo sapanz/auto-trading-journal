@@ -224,6 +224,10 @@ def analytics_page(request: Request, db: Session = Depends(get_db), fy: str | No
     is_current_fy = selected_fy == current_fy_label
     forecast = analytics.project_forward(daily_rows, cumulative, fy_end) if is_current_fy else None
 
+    total_pnl_all_time = closed_q.with_entities(func.sum(models.Position.net_pnl)).scalar() or 0.0
+    capital = _parse_float(settings.get_setting(db, RISK_CAPITAL_KEY, "0"), 0.0)
+    cagr = analytics.compute_cagr(capital, total_pnl_all_time, bounds[0], date.today())
+
     benchmark_data = None
     if daily_rows:
         benchmark_symbol = os.environ.get("JOURNAL_BENCHMARK_SYMBOL", "NIFTY50")
@@ -270,6 +274,7 @@ def analytics_page(request: Request, db: Session = Depends(get_db), fy: str | No
             "hist_counts": hist_counts,
             "forecast": forecast,
             "benchmark_data": benchmark_data,
+            "cagr": cagr,
         },
     )
 

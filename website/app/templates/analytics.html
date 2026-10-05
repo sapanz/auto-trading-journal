@@ -59,6 +59,41 @@
 </section>
 
 <section class="panel">
+  <h2>CAGR — Return on Capital</h2>
+  {% if cagr %}
+  <div class="detail-grid" style="margin-top: 0;">
+    <div>
+      <span class="stat-label">Annualized Return</span>
+      <span class="stat-value {{ 'positive' if cagr.cagr_percent > 0 else ('negative' if cagr.cagr_percent < 0 else '') }}">{{ "%.2f"|format(cagr.cagr_percent) }}%</span>
+    </div>
+    <div>
+      <span class="stat-label">Starting Capital</span>
+      <span class="stat-value">{{ "%.2f"|format(cagr.starting_capital) }}</span>
+    </div>
+    <div>
+      <span class="stat-label">Current Value (capital + all-time P&amp;L)</span>
+      <span class="stat-value">{{ "%.2f"|format(cagr.ending_value) }}</span>
+    </div>
+    <div>
+      <span class="stat-label">Time Span</span>
+      <span class="stat-value">{{ "%.2f"|format(cagr.years) }} yrs</span>
+    </div>
+  </div>
+  <p class="muted-note">
+    Compounded annual growth since your first trade, computed on the capital you set on the
+    <a href="/risk-management">Risk Management</a> page plus all-time net P&amp;L — not just FY {{ fy }}.
+    It assumes that capital figure is your true starting balance and doesn't account for any
+    deposits or withdrawals made outside this app.
+  </p>
+  {% else %}
+  <p class="muted-note">
+    Set your trading capital on the <a href="/risk-management">Risk Management</a> page to see CAGR here.
+    Needs at least ~30 days of trading history and a positive capital value.
+  </p>
+  {% endif %}
+</section>
+
+<section class="panel">
   <h2>Equity Curve{{ ' + Projection' if forecast }}</h2>
   <canvas id="equityChart" height="90"></canvas>
   {% if is_current_fy %}
