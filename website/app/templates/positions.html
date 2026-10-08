@@ -6,8 +6,17 @@
 {% block content %}
 {% if sector_rows %}
 <section class="panel">
-  <h2>Open Positions — Sector Allocation</h2>
-  <p class="muted-note">Where your open capital ({{ "%.2f"|format(total_invested) }} invested) sits across sectors, grouped by position value at entry.</p>
+  <div class="filters" style="margin-bottom: 4px;">
+    <h2 style="margin: 0;">Open Positions — Sector Allocation</h2>
+    <form method="post" action="/positions/refresh-sectors" class="fy-form">
+      <button type="submit" class="symbol-filter-form button" style="background: var(--panel-bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer;">Refresh sector data</button>
+    </form>
+  </div>
+  <p class="muted-note">
+    Where your open capital ({{ "%.2f"|format(total_invested) }} invested) sits across sectors, grouped by position value at entry.
+    Sectors are looked up automatically per symbol (and cached) -- not hand-tagged. F&amp;O contract symbols and anything the lookup
+    can't resolve show up under "Uncategorized"; use Refresh above to retry those.
+  </p>
   <div class="two-col" style="margin-bottom: 0;">
     <div>
       <canvas id="sectorChart" height="260"></canvas>
