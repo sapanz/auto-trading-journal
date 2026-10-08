@@ -11,7 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import analytics, benchmark, models, schemas, settings, tax_report
+from . import analytics, benchmark, models, schemas, sectors, settings, tax_report
 from .database import Base, engine, get_db, run_migrations
 from .fy import fy_bounds, fy_label_for_date, fy_options
 from .insights import generate_weekly_insight
@@ -346,10 +346,21 @@ def positions_list(
     bounds = db.query(func.min(order_col), func.max(order_col)).one()
     available_fys = fy_options(bounds[0], bounds[1])
 
+    open_positions = db.query(models.Position).filter(models.Position.state == "open").all()
+    sector_rows, total_invested = sectors.portfolio_breakdown(open_positions)
+
     return templates.TemplateResponse(
         request,
         "positions.html",
-        {"positions": positions, "state": state, "product": product, "fy": fy, "available_fys": available_fys},
+        {
+            "positions": positions,
+            "state": state,
+            "product": product,
+            "fy": fy,
+            "available_fys": available_fys,
+            "sector_rows": sector_rows,
+            "total_invested": total_invested,
+        },
     )
 
 
