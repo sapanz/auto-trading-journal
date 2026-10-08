@@ -128,6 +128,18 @@ class BenchmarkPrice(Base):
     close = Column(Float, nullable=False)
 
 
+class SymbolSector(Base):
+    """Cached sector classification for a tradingsymbol, looked up
+    automatically from Yahoo Finance (see sectors.py) rather than
+    hand-maintained -- a listed company's sector doesn't change day to
+    day, so this is a one-time fetch per symbol, not a per-request one."""
+    __tablename__ = "symbol_sectors"
+
+    symbol = Column(String, primary_key=True)
+    sector = Column(String, nullable=False)
+    fetched_at = Column(DateTime, default=dt.datetime.utcnow)
+
+
 class Insight(Base):
     """A generated weekly digest of trading stats and rule-based suggestions."""
     __tablename__ = "insights"

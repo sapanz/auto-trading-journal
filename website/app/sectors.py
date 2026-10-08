@@ -1,145 +1,88 @@
-"""Static NSE tradingsymbol -> sector mapping for the open-positions
-sector-allocation pie chart. There's no live instrument-master/sector
-feed wired into this app, so this covers the commonly traded F&O and
-large/mid-cap names by hand; anything not listed falls under
-"Uncategorized" rather than breaking the chart.
+"""Automated sector lookup for open-position symbols, for the sector
+allocation pie chart. No hand-maintained symbol-to-sector map: each
+tradingsymbol's sector is fetched from Yahoo Finance's assetProfile
+data (the same unofficial, no-API-key source benchmark.py already uses
+for Nifty 50 prices) and cached in the symbol_sectors table, since a
+company's sector classification doesn't change day to day -- it's a
+one-time lookup per symbol, not a per-request fetch.
+
+Unlike the `chart` endpoint benchmark.py calls, Yahoo's quoteSummary
+endpoint (where sector/industry data lives) has required a session
+cookie + crumb since mid-2024, so fetch_sector_from_yahoo() does that
+handshake first. Only plain NSE equity symbols resolve (Yahoo has no
+listing for F&O contract symbols like "RELIANCE24OCTFUT") -- anything
+that fails to resolve is cached as "Uncategorized" so a single bad
+lookup doesn't retry on every page load; refresh_symbols() forces a
+re-check (wired to a "Refresh sector data" button on the Trades page).
 """
+import datetime as dt
 
-SECTOR_MAP = {
-    # Banking & Financial Services
-    "HDFCBANK": "Banking & Financial Services", "ICICIBANK": "Banking & Financial Services",
-    "SBIN": "Banking & Financial Services", "KOTAKBANK": "Banking & Financial Services",
-    "AXISBANK": "Banking & Financial Services", "INDUSINDBK": "Banking & Financial Services",
-    "BANKBARODA": "Banking & Financial Services", "PNB": "Banking & Financial Services",
-    "IDFCFIRSTB": "Banking & Financial Services", "FEDERALBNK": "Banking & Financial Services",
-    "AUBANK": "Banking & Financial Services", "BANDHANBNK": "Banking & Financial Services",
-    "RBLBANK": "Banking & Financial Services", "YESBANK": "Banking & Financial Services",
-    "CANBK": "Banking & Financial Services", "UNIONBANK": "Banking & Financial Services",
-    "BAJFINANCE": "Banking & Financial Services", "BAJAJFINSV": "Banking & Financial Services",
-    "HDFCLIFE": "Banking & Financial Services", "SBILIFE": "Banking & Financial Services",
-    "ICICIPRULI": "Banking & Financial Services", "ICICIGI": "Banking & Financial Services",
-    "HDFCAMC": "Banking & Financial Services", "CHOLAFIN": "Banking & Financial Services",
-    "MUTHOOTFIN": "Banking & Financial Services", "PFC": "Banking & Financial Services",
-    "RECLTD": "Banking & Financial Services", "LICHSGFIN": "Banking & Financial Services",
-    "SHRIRAMFIN": "Banking & Financial Services", "LICI": "Banking & Financial Services",
-    "SBICARD": "Banking & Financial Services", "PAYTM": "Banking & Financial Services",
-    "BSE": "Capital Markets", "MCX": "Capital Markets", "CDSL": "Capital Markets",
-    "ANGELONE": "Capital Markets", "IEX": "Capital Markets", "CAMS": "Capital Markets",
-    "NUVAMA": "Capital Markets", "360ONE": "Capital Markets",
+from sqlalchemy.orm import Session
 
-    # IT
-    "TCS": "IT", "INFY": "IT", "WIPRO": "IT", "HCLTECH": "IT", "TECHM": "IT",
-    "LTIM": "IT", "LTTS": "IT", "MPHASIS": "IT", "PERSISTENT": "IT", "COFORGE": "IT",
-    "OFSS": "IT", "KPITTECH": "IT", "TATAELXSI": "IT", "SONATSOFTW": "IT",
-    "ZENSARTECH": "IT", "CYIENT": "IT", "BIRLASOFT": "IT",
+from . import models
 
-    # Pharma & Healthcare
-    "SUNPHARMA": "Pharma & Healthcare", "DRREDDY": "Pharma & Healthcare",
-    "CIPLA": "Pharma & Healthcare", "DIVISLAB": "Pharma & Healthcare",
-    "LUPIN": "Pharma & Healthcare", "AUROPHARMA": "Pharma & Healthcare",
-    "BIOCON": "Pharma & Healthcare", "ALKEM": "Pharma & Healthcare",
-    "TORNTPHARM": "Pharma & Healthcare", "ZYDUSLIFE": "Pharma & Healthcare",
-    "GLENMARK": "Pharma & Healthcare", "LAURUSLABS": "Pharma & Healthcare",
-    "IPCALAB": "Pharma & Healthcare", "ABBOTINDIA": "Pharma & Healthcare",
-    "PFIZER": "Pharma & Healthcare", "GLAXO": "Pharma & Healthcare", "SANOFI": "Pharma & Healthcare",
-    "APOLLOHOSP": "Pharma & Healthcare", "FORTIS": "Pharma & Healthcare",
-    "MAXHEALTH": "Pharma & Healthcare", "NARAYANA": "Pharma & Healthcare",
-    "METROPOLIS": "Pharma & Healthcare", "LALPATHLAB": "Pharma & Healthcare",
-    "SYNGENE": "Pharma & Healthcare",
-
-    # Auto & Auto Ancillaries
-    "MARUTI": "Auto", "TATAMOTORS": "Auto", "M&M": "Auto", "BAJAJ-AUTO": "Auto",
-    "EICHERMOT": "Auto", "HEROMOTOCO": "Auto", "TVSMOTOR": "Auto", "ASHOKLEY": "Auto",
-    "ESCORTS": "Auto", "BHARATFORG": "Auto", "MOTHERSON": "Auto", "BOSCHLTD": "Auto",
-    "MRF": "Auto", "APOLLOTYRE": "Auto", "CEATLTD": "Auto", "BALKRISIND": "Auto",
-    "EXIDEIND": "Auto", "AMARAJABAT": "Auto",
-
-    # FMCG
-    "HINDUNILVR": "FMCG", "ITC": "FMCG", "NESTLEIND": "FMCG", "BRITANNIA": "FMCG",
-    "DABUR": "FMCG", "GODREJCP": "FMCG", "MARICO": "FMCG", "COLPAL": "FMCG",
-    "TATACONSUM": "FMCG", "UBL": "FMCG", "VBL": "FMCG", "EMAMILTD": "FMCG",
-    "PGHH": "FMCG", "GILLETTE": "FMCG", "JYOTHYLAB": "FMCG", "RADICO": "FMCG",
-
-    # Oil, Gas & Energy / Power
-    "RELIANCE": "Oil & Gas", "ONGC": "Oil & Gas", "IOC": "Oil & Gas", "BPCL": "Oil & Gas",
-    "HPCL": "Oil & Gas", "GAIL": "Oil & Gas", "PETRONET": "Oil & Gas", "OIL": "Oil & Gas",
-    "MGL": "Oil & Gas", "IGL": "Oil & Gas", "ATGL": "Oil & Gas",
-    "NTPC": "Power & Utilities", "POWERGRID": "Power & Utilities", "TATAPOWER": "Power & Utilities",
-    "TORNTPOWER": "Power & Utilities", "NHPC": "Power & Utilities", "SJVN": "Power & Utilities",
-    "CESC": "Power & Utilities", "JSWENERGY": "Power & Utilities", "ADANIGREEN": "Power & Utilities",
-    "ADANIENSOL": "Power & Utilities", "ADANIPOWER": "Power & Utilities",
-
-    # Metals & Mining
-    "TATASTEEL": "Metals & Mining", "JSWSTEEL": "Metals & Mining", "HINDALCO": "Metals & Mining",
-    "VEDANTA": "Metals & Mining", "JINDALSTEL": "Metals & Mining", "SAIL": "Metals & Mining",
-    "NMDC": "Metals & Mining", "NATIONALUM": "Metals & Mining", "HINDZINC": "Metals & Mining",
-    "MOIL": "Metals & Mining", "APLAPOLLO": "Metals & Mining", "RATNAMANI": "Metals & Mining",
-    "WELCORP": "Metals & Mining",
-
-    # Infrastructure, Construction & Defense
-    "LT": "Infrastructure & Construction", "ADANIPORTS": "Infrastructure & Construction",
-    "GMRINFRA": "Infrastructure & Construction", "IRB": "Infrastructure & Construction",
-    "NBCC": "Infrastructure & Construction", "NCC": "Infrastructure & Construction",
-    "RVNL": "Infrastructure & Construction", "IRCON": "Infrastructure & Construction",
-    "CONCOR": "Infrastructure & Construction", "GRINFRA": "Infrastructure & Construction",
-    "KNRCON": "Infrastructure & Construction", "PNC": "Infrastructure & Construction",
-    "HFCL": "Telecom", "HAL": "Defense", "BEL": "Defense", "BEML": "Defense",
-    "MAZDOCK": "Defense", "COCHINSHIP": "Defense", "GRSE": "Defense", "BDL": "Defense",
-
-    # Cement
-    "ULTRACEMCO": "Cement", "SHREECEM": "Cement", "AMBUJACEM": "Cement", "ACC": "Cement",
-    "DALBHARAT": "Cement", "RAMCOCEM": "Cement", "JKCEMENT": "Cement",
-    "INDIACEM": "Cement", "HEIDELBERG": "Cement",
-
-    # Telecom
-    "BHARTIARTL": "Telecom", "IDEA": "Telecom", "INDUSTOWER": "Telecom",
-    "TATACOMM": "Telecom", "RAILTEL": "Telecom",
-
-    # Consumer Durables & Retail
-    "TITAN": "Consumer Durables & Retail", "DMART": "Consumer Durables & Retail",
-    "TRENT": "Consumer Durables & Retail", "PAGEIND": "Consumer Durables & Retail",
-    "BATAINDIA": "Consumer Durables & Retail", "VOLTAS": "Consumer Durables & Retail",
-    "HAVELLS": "Consumer Durables & Retail", "CROMPTON": "Consumer Durables & Retail",
-    "WHIRLPOOL": "Consumer Durables & Retail", "BLUESTARCO": "Consumer Durables & Retail",
-    "DIXON": "Consumer Durables & Retail", "AMBER": "Consumer Durables & Retail",
-    "VGUARD": "Consumer Durables & Retail", "RELAXO": "Consumer Durables & Retail",
-
-    # Capital Goods / Industrials
-    "SIEMENS": "Capital Goods", "ABB": "Capital Goods", "CUMMINSIND": "Capital Goods",
-    "THERMAX": "Capital Goods", "BHEL": "Capital Goods", "SKFINDIA": "Capital Goods",
-    "SCHAEFFLER": "Capital Goods", "POLYCAB": "Capital Goods", "KEI": "Capital Goods",
-    "FINEORG": "Capital Goods", "CGPOWER": "Capital Goods",
-
-    # Chemicals & Fertilizers
-    "PIDILITIND": "Chemicals", "SRF": "Chemicals", "UPL": "Chemicals", "AARTIIND": "Chemicals",
-    "DEEPAKNTR": "Chemicals", "NAVINFLUOR": "Chemicals", "TATACHEM": "Chemicals",
-    "GNFC": "Chemicals", "GSFC": "Chemicals", "CHAMBLFERT": "Chemicals",
-    "COROMANDEL": "Chemicals", "PIIND": "Chemicals", "VINATIORGA": "Chemicals",
-    "ATUL": "Chemicals", "BALRAMCHIN": "Chemicals",
-
-    # Realty
-    "DLF": "Realty", "GODREJPROP": "Realty", "OBEROIRLTY": "Realty", "PRESTIGE": "Realty",
-    "PHOENIXLTD": "Realty", "BRIGADE": "Realty", "SOBHA": "Realty", "SUNTECK": "Realty",
-    "MAHLIFE": "Realty",
-
-    # Media & Entertainment
-    "ZEEL": "Media & Entertainment", "SUNTV": "Media & Entertainment",
-    "PVRINOX": "Media & Entertainment", "NAZARA": "Media & Entertainment",
-    "SAREGAMA": "Media & Entertainment", "NETWORK18": "Media & Entertainment",
-
-    # Diversified / New-age internet
-    "ADANIENT": "Diversified", "GRASIM": "Diversified",
-    "ZOMATO": "New-age / Internet", "NYKAA": "New-age / Internet",
-    "POLICYBZR": "New-age / Internet", "DELHIVERY": "New-age / Internet",
-    "IRCTC": "New-age / Internet",
-}
+FETCH_TIMEOUT_SECONDS = 8
+UNCATEGORIZED = "Uncategorized"
 
 
-def sector_for(tradingsymbol: str) -> str:
-    return SECTOR_MAP.get((tradingsymbol or "").upper(), "Uncategorized")
+def fetch_sector_from_yahoo(tradingsymbol: str) -> str | None:
+    """Returns the sector name for an NSE-listed equity, or None if
+    Yahoo has no assetProfile sector for it. Raises on any network/auth/
+    parse failure -- callers must catch."""
+    import requests
+
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    })
+    session.get("https://fc.yahoo.com", timeout=FETCH_TIMEOUT_SECONDS)  # sets the cookie getcrumb needs
+    crumb_resp = session.get("https://query2.finance.yahoo.com/v1/test/getcrumb", timeout=FETCH_TIMEOUT_SECONDS)
+    crumb_resp.raise_for_status()
+    crumb = crumb_resp.text.strip()
+
+    resp = session.get(
+        f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{tradingsymbol}.NS",
+        params={"modules": "assetProfile", "crumb": crumb},
+        timeout=FETCH_TIMEOUT_SECONDS,
+    )
+    resp.raise_for_status()
+    result = resp.json()["quoteSummary"]["result"]
+    if not result:
+        return None
+    return result[0].get("assetProfile", {}).get("sector") or None
 
 
-def portfolio_breakdown(open_positions):
+def get_sector(db: Session, tradingsymbol: str) -> str:
+    """Cached sector lookup: fetches on first sight of a symbol, then
+    reuses the cached value on every later call. A failed/empty lookup
+    is cached as "Uncategorized" too, so it doesn't retry every page
+    load -- call refresh_symbols() to force a re-check."""
+    row = db.get(models.SymbolSector, tradingsymbol)
+    if row:
+        return row.sector
+
+    try:
+        sector = fetch_sector_from_yahoo(tradingsymbol) or UNCATEGORIZED
+    except Exception:
+        sector = UNCATEGORIZED
+
+    db.add(models.SymbolSector(symbol=tradingsymbol, sector=sector, fetched_at=dt.datetime.utcnow()))
+    db.commit()
+    return sector
+
+
+def refresh_symbols(db: Session, tradingsymbols: list[str]) -> None:
+    """Drops the cached sector for these symbols so the next lookup
+    re-fetches instead of reusing a stale/failed result."""
+    symbols = set(tradingsymbols)
+    if not symbols:
+        return
+    db.query(models.SymbolSector).filter(models.SymbolSector.symbol.in_(symbols)).delete(synchronize_session=False)
+    db.commit()
+
+
+def portfolio_breakdown(db: Session, open_positions):
     """Investment allocation across sectors for currently OPEN positions.
     Groups by invested value (entry_value -- capital currently deployed),
     not P&L: this is about where your open capital sits, not how those
@@ -149,7 +92,7 @@ def portfolio_breakdown(open_positions):
     total_invested = sum(p.entry_value for p in open_positions)
     agg: dict[str, dict] = {}
     for p in open_positions:
-        sector = sector_for(p.tradingsymbol)
+        sector = get_sector(db, p.tradingsymbol)
         d = agg.setdefault(sector, {"invested": 0.0, "stocks": {}})
         d["invested"] += p.entry_value
         d["stocks"][p.tradingsymbol] = d["stocks"].get(p.tradingsymbol, 0.0) + p.entry_value

@@ -347,7 +347,7 @@ def positions_list(
     available_fys = fy_options(bounds[0], bounds[1])
 
     open_positions = db.query(models.Position).filter(models.Position.state == "open").all()
-    sector_rows, total_invested = sectors.portfolio_breakdown(open_positions)
+    sector_rows, total_invested = sectors.portfolio_breakdown(db, open_positions)
 
     return templates.TemplateResponse(
         request,
@@ -362,6 +362,16 @@ def positions_list(
             "total_invested": total_invested,
         },
     )
+
+
+@app.post("/positions/refresh-sectors")
+def refresh_sectors(db: Session = Depends(get_db)):
+    symbols = [
+        row[0] for row in
+        db.query(models.Position.tradingsymbol).filter(models.Position.state == "open").distinct().all()
+    ]
+    sectors.refresh_symbols(db, symbols)
+    return RedirectResponse(url="/positions?state=open", status_code=303)
 
 
 @app.get("/trades")
