@@ -1,6 +1,85 @@
 {% extends "base.html" %}
 {% block title %}Trades · Trading Journal{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+{% endblock %}
 {% block content %}
+{% if sector_rows %}
+<section class="panel">
+  <h2>Open Positions — Sector Allocation</h2>
+  <p class="muted-note">Where your open capital ({{ "%.2f"|format(total_invested) }} invested) sits across sectors, grouped by position value at entry.</p>
+  <div class="two-col" style="margin-bottom: 0;">
+    <div>
+      <canvas id="sectorChart" height="260"></canvas>
+    </div>
+    <div>
+      {% for row in sector_rows %}
+      <details class="fills-details" style="margin-bottom: 10px;">
+        <summary><strong>{{ row.sector }}</strong> — {{ "%.2f"|format(row.invested) }} ({{ row.percent }}%)</summary>
+        <table class="data-table fills-table" style="margin-top: 6px;">
+          <thead><tr><th>Symbol</th><th>Invested</th><th>% of sector</th></tr></thead>
+          <tbody>
+            {% for s in row.stocks %}
+            <tr><td>{{ s.symbol }}</td><td>{{ "%.2f"|format(s.invested) }}</td><td>{{ s.percent_of_sector }}%</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </details>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+<script>
+  const SERIES_COLORS = [
+    getComputedStyle(document.documentElement).getPropertyValue('--series-1').trim(),
+    getComputedStyle(document.documentElement).getPropertyValue('--series-2').trim(),
+    getComputedStyle(document.documentElement).getPropertyValue('--series-3').trim(),
+    getComputedStyle(document.documentElement).getPropertyValue('--series-4').trim(),
+    getComputedStyle(document.documentElement).getPropertyValue('--series-5').trim(),
+    getComputedStyle(document.documentElement).getPropertyValue('--series-6').trim(),
+    getComputedStyle(document.documentElement).getPropertyValue('--series-7').trim(),
+  ];
+  const OTHER_COLOR = getComputedStyle(document.documentElement).getPropertyValue('--series-other').trim();
+
+  const sectorRows = {{ sector_rows|tojson }};
+  const MAX_SLICES = 7;
+  let chartLabels, chartValues, chartColors;
+  if (sectorRows.length > MAX_SLICES) {
+    const head = sectorRows.slice(0, MAX_SLICES);
+    const restTotal = sectorRows.slice(MAX_SLICES).reduce((sum, r) => sum + r.invested, 0);
+    chartLabels = head.map(r => r.sector).concat(['Other']);
+    chartValues = head.map(r => r.invested).concat([restTotal]);
+    chartColors = SERIES_COLORS.slice(0, MAX_SLICES).concat([OTHER_COLOR]);
+  } else {
+    chartLabels = sectorRows.map(r => r.sector);
+    chartValues = sectorRows.map(r => r.invested);
+    chartColors = SERIES_COLORS.slice(0, sectorRows.length);
+  }
+
+  new Chart(document.getElementById('sectorChart'), {
+    type: 'pie',
+    data: {
+      labels: chartLabels,
+      datasets: [{ data: chartValues, backgroundColor: chartColors, borderWidth: 2, borderColor: getComputedStyle(document.documentElement).getPropertyValue('--panel-bg').trim() }],
+    },
+    options: {
+      plugins: {
+        legend: { position: 'right', labels: { color: getComputedStyle(document.documentElement).getPropertyValue('--text').trim() } },
+        tooltip: {
+          callbacks: {
+            label: function (ctx) {
+              const total = chartValues.reduce((a, b) => a + b, 0);
+              const pct = total ? (ctx.parsed / total * 100).toFixed(1) : '0.0';
+              return ctx.label + ': ' + ctx.parsed.toLocaleString('en-IN', { maximumFractionDigits: 0 }) + ' (' + pct + '%)';
+            },
+          },
+        },
+      },
+    },
+  });
+</script>
+{% endif %}
+
 <section class="panel">
   <div class="filters">
     <a href="/positions{{ '?fy=' ~ fy if fy }}" class="{{ 'active' if not state else '' }}">All</a>
