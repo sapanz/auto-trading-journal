@@ -243,7 +243,7 @@ def analytics_page(request: Request, db: Session = Depends(get_db), fy: str | No
                 "symbol": benchmark_symbol,
                 "labels": bench_labels,
                 "values": bench_values,
-                "your_series": benchmark.your_capital_weighted_series(daily_capital_rows),
+                "your_series": benchmark.your_capital_weighted_series([d for d, _ in prices], daily_capital_rows),
             }
 
     return templates.TemplateResponse(
