@@ -109,7 +109,7 @@ def normalize_to_100(prices: list[tuple[dt.date, float]]):
     return labels, values
 
 
-def your_capital_weighted_series(daily_capital_rows):
+def your_capital_weighted_series(trading_dates, daily_capital_rows):
     """Index (start=100) of return on capital actually deployed in trades,
     chain-linked day over day: each day's return is that day's net P&L
     divided by that day's capital committed (sum of entry_value across
@@ -117,15 +117,29 @@ def your_capital_weighted_series(daily_capital_rows):
     This sidesteps needing to track total account capital or deposits/
     withdrawals -- which this app has no record of -- since it's derived
     entirely from trade data already in the journal.
+
+    Aligned to `trading_dates` -- the same calendar dates the benchmark
+    index uses -- rather than only the days you happened to close a
+    trade. The two series used to be built on separate, differently-
+    sized date lists and then plotted against a single shared x-axis
+    positionally (index 0 against index 0, etc.), which silently
+    misaligned "You" against the wrong calendar dates on this chart
+    whenever your trading days had gaps relative to Nifty's (i.e.
+    always). On a date with no closed trade, the index just carries
+    forward flat -- no P&L event that day, so no change -- rather than
+    being skipped.
+
     Caveat: it measures the efficiency of capital you actually put into
     trades, not your whole account's return. If you keep money on the
     sidelines rather than fully deployed, your real account return will be
     lower than this line -- it answers "how good are my trades", not "how
     good is my whole portfolio"."""
+    daily_lookup = {d: (pnl, capital) for d, pnl, capital in daily_capital_rows}
     labels = []
     values = []
     index = 100.0
-    for d, pnl, capital in daily_capital_rows:
+    for d in trading_dates:
+        pnl, capital = daily_lookup.get(d, (0.0, 0.0))
         if capital:
             index *= (1 + pnl / capital)
         labels.append(d.isoformat())
