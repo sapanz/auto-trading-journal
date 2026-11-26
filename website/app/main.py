@@ -11,7 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import analytics, benchmark, models, schemas, sectors, settings, tax_report
+from . import analytics, benchmark, dashboard_data, models, schemas, sectors, settings, tax_report
 from .database import Base, engine, get_db, run_migrations
 from .fy import fy_bounds, fy_label_for_date, fy_options
 from .insights import generate_weekly_insight
@@ -21,6 +21,9 @@ Base.metadata.create_all(bind=engine)
 run_migrations()
 
 APP_DIR = Path(__file__).resolve().parent
+# Cache-buster for the dashboard's own JS (the files change on deploy; this
+# keeps a browser from serving yesterday's copy).
+ASSET_V = str(int(max((f.stat().st_mtime for f in (APP_DIR / "static").glob("*") if f.is_file()), default=0)))
 
 app = FastAPI(title="Trading Journal")
 app.mount("/static", StaticFiles(directory=str(APP_DIR / "static")), name="static")
@@ -148,39 +151,30 @@ def api_recompute_positions(db: Session = Depends(get_db), _=Depends(check_api_k
 
 @app.get("/")
 def dashboard(request: Request, db: Session = Depends(get_db)):
-    """Deliberately light on charts -- Analytics already covers the
-    equity curve, monthly breakdown, and everything else in depth. This
-    page is the daily-glance summary plus the quote slider."""
-    closed_q = db.query(models.Position).filter(models.Position.state == "closed")
-    total_pnl = closed_q.with_entities(func.coalesce(func.sum(models.Position.net_pnl), 0.0)).scalar()
-    total_gross_pnl = closed_q.with_entities(func.coalesce(func.sum(models.Position.pnl), 0.0)).scalar()
-    total_charges = closed_q.with_entities(func.coalesce(func.sum(models.Position.charges), 0.0)).scalar()
-    total_trades = closed_q.count()
-    wins = closed_q.filter(models.Position.is_win == 1).count()
-    win_rate = (wins / total_trades * 100.0) if total_trades else 0.0
-    open_count = db.query(models.Position).filter(models.Position.state == "open").count()
-
-    recent = (
-        db.query(models.Position)
-        .filter(models.Position.state == "closed")
-        .order_by(models.Position.exit_time.desc())
-        .limit(25)
-        .all()
-    )
-
+    """The home page: progress and the things you control first, with the
+    real P&L right beside them, and everything driven client-side from one
+    embedded payload (see dashboard_data.py and static/dashboard.js).
+    Analytics keeps the deeper FY-by-FY charts."""
+    capital = _parse_float(settings.get_setting(db, RISK_CAPITAL_KEY, "0"), 0.0)
     return templates.TemplateResponse(
         request,
         "dashboard.html",
-        {
-            "total_pnl": total_pnl,
-            "total_gross_pnl": total_gross_pnl,
-            "total_charges": total_charges,
-            "total_trades": total_trades,
-            "win_rate": win_rate,
-            "open_count": open_count,
-            "recent": recent,
-        },
+        {"payload": dashboard_data.build_payload(db, capital), "asset_v": ASSET_V},
     )
+
+
+@app.post("/api/positions/{position_id}/review")
+def api_review_position(position_id: int, payload: schemas.ReviewIn, db: Session = Depends(get_db)):
+    """Save a note and/or self-rating without leaving the dashboard. Session
+    (PIN) protected like every other page; the fetcher's API key isn't used
+    here."""
+    pos = db.get(models.Position, position_id)
+    if not pos:
+        raise HTTPException(404)
+    pos.notes = payload.notes.strip()
+    pos.rating = payload.rating
+    db.commit()
+    return {"id": pos.id, "note": pos.notes, "rating": pos.rating}
 
 
 @app.get("/analytics")

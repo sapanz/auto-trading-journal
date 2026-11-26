@@ -1,7 +1,7 @@
 import datetime as dt
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class TradeIn(BaseModel):
@@ -45,6 +45,13 @@ class TradeIn(BaseModel):
 
 class TradesPayload(BaseModel):
     trades: List[TradeIn]
+
+
+class ReviewIn(BaseModel):
+    """Inline edit of a closed trade's note and self-rating from the
+    dashboard (the same two fields /positions/{id}/notes edits)."""
+    notes: str = Field(default="", max_length=5000)
+    rating: Optional[int] = Field(default=None, ge=1, le=5)
 
 
 def _parse_dt(value: str, fallback_date: Optional[dt.date] = None) -> dt.datetime:
