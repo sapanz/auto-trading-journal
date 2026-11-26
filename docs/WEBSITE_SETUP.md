@@ -146,6 +146,50 @@ curl -X POST "$JOURNAL_URL/api/positions/recompute" \
 This rebuilds every position from its existing trade legs (same FIFO logic,
 now with charges) without touching the underlying trades.
 
+## 3d. The home dashboard (`/`)
+
+The home page is built around what a trader controls, with the real P&L right
+beside it rather than leading the page:
+
+- **Range switcher** (latest day / 7 days / 30 days / this FY / all time) drives
+  every section, with a "vs previous period" comparison for each.
+- **The part you control**: discipline (share of trades with no Big Loss,
+  Quick Scalp or revenge flag), current clean-trade streak, journal habit
+  (trades with a note or rating) and average loss, each compared with the
+  previous period and clickable through to the matching trades.
+- **Where you stand**: net P&L with the gross → charges → net breakdown, change
+  vs the previous period, recovery from your low, and an interactive equity
+  curve (click a point to open that day; per-trade on the latest-day range).
+  The **"What if I hadn't taken…" chips** set a pattern aside (quick scalps,
+  revenge re-entries, intraday, the first 15 minutes, your costliest symbols or
+  strategy tags) and redraw the curve without it. It is hindsight, and it says
+  so - a pattern that was net profitable is shown as costing you if removed.
+- **Milestones** for habits (clean-trade runs, trades reviewed, green days,
+  trades since your last Big Loss, weeks holding or lifting discipline), a
+  **"since you were last here"** line, a clickable 20-week calendar, a
+  **"where the losses cluster"** chart by hour / weekday / product, your biggest
+  setbacks with an inline "add a lesson" box, and a filterable, sortable,
+  searchable trades table with inline notes and self-rating.
+
+How it works: the server embeds every closed position once as JSON
+(`app/dashboard_data.py`); all statistics are computed in the browser by
+`app/static/dashboard_logic.js` (no round trips when you change a range or toggle
+a chip) and rendered by `app/static/dashboard.js`. Notes and ratings are saved
+through `POST /api/positions/{id}/review` (PIN-protected like every page). To tune
+what counts as a "flag" or the milestone tiers, edit `ATTENTION_TAGS` and
+`milestones()` in `dashboard_logic.js`. The deeper FY-by-FY charts are still on
+`/analytics`.
+
+### Running the tests
+
+```bash
+# calculation layer (Node 18+, no dependencies)
+node --test website/tests/dashboard_logic.test.mjs
+
+# the FastAPI side (login, embedded data, the review endpoint, other pages)
+cd website && pip install -r requirements-dev.txt && pytest
+```
+
 ## 4. Deploying
 
 ### Free, no-card option: Vercel (compute) + Neon (Postgres)

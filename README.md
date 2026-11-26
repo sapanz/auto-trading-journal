@@ -50,6 +50,11 @@ deployed somewhere reachable.
 - **Discipline flags**: Big Loss / Big Win (configurable ROI% threshold),
   Quick Scalp (<2 min hold on MIS), Possible Revenge Trade (bigger size
   re-entered within 10 minutes of a loss on the same symbol).
+- **A progress-first home dashboard** (`/`): discipline, clean-trade streaks,
+  milestones and journaling up top with the real P&L beside them, an
+  interactive equity curve, "what if I hadn't taken…" what-ifs, a clickable
+  calendar, and a filterable trades table with inline notes — see
+  [docs/WEBSITE_SETUP.md](docs/WEBSITE_SETUP.md#3d-the-home-dashboard-).
 - **Weekly insight digest**: win rate, net P&L, best/worst symbol, and
   templated suggestions (e.g. low win rate, repeated big losses, MIS vs.
   delivery win-rate gap) — extend the rules in `website/app/insights.py`
